@@ -1,4 +1,5 @@
-![Uploading image.png…]()
+<img width="1918" height="1032" alt="image" src="https://github.com/user-attachments/assets/1ca762c0-3948-45ce-83da-6cfddf07df8a" /> 
+
 
 # 🌍 Advanced Sentinel-2 Geospatial Dashboard
 
