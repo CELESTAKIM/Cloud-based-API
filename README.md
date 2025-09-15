@@ -1,4 +1,5 @@
-<img width="1915" height="1033" alt="image" src="https://github.com/user-attachments/assets/d0158c00-1b44-49ba-9a49-c630628031fb" />
+![Uploading image.png…]()
+
 # 🌍 Advanced Sentinel-2 Geospatial Dashboard
 
 An interactive, multi-view web application for analyzing Sentinel-2 satellite imagery using the Google Earth Engine (GEE) API and a Node.js backend. This dashboard allows users to perform comparative analysis, visualize different spectral indices, and manage multiple data layers for various Kenyan counties.
