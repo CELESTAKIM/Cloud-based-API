@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Advanced Sentinel Dashboard</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+    <style>
+      :root {
+        --primary-color: #007bff;
+        --secondary-color: #f0f0f0;
+        --border-color: #ccc;
+        --panel-bg: rgba(255, 255, 255, 0.95);
+        --panel-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: var(--font-family);
+        background-color: var(--secondary-color);
+        display: flex;
+        color: #333;
+      }
+      #main-container {
+        display: flex;
+        flex-grow: 1;
+        position: relative;
+        overflow: hidden;
+      }
+      #map-grid-container {
+        display: grid;
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr;
+        flex-grow: 1;
+        width: 100%;
+        height: 100vh;
+      }
+      .map-container {
+        position: relative;
+        border: 1px solid var(--border-color);
+        box-shadow: inset 0 0 5px rgba(0,0,0,0.1);
+        overflow: hidden;
+      }
+      .leaflet-map {
+        height: 100%;
+        width: 100%;
+        transition: transform 0.3s ease;
+      }
+      .toc-panel {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        z-index: 1000;
+        background: var(--panel-bg);
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: var(--panel-shadow);
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        width: 320px;
+        max-height: 95vh;
+        overflow-y: auto;
+        transition: all 0.3s ease-in-out;
+      }
+      .toc-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 5px;
+        cursor: pointer;
+      }
+      .toc-header h4 {
+        margin: 0;
+        font-size: 1.2rem;
+        color: var(--primary-color);
+      }
+      .toc-content {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+      }
+      .layer-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        border-top: 1px solid var(--border-color);
+        padding-top: 10px;
+      }
+      .layer-item {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 10px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        border: 1px solid #e9ecef;
+        margin-bottom: 8px;
+        transition: all 0.2s ease-in-out;
+      }
+      .layer-item.active {
+        box-shadow: 0 0 0 2px var(--primary-color);
+      }
+      .layer-item-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .layer-item-header span {
+        font-weight: bold;
+        flex-grow: 1;
+        margin-right: 10px;
+        cursor: pointer;
+      }
+      .layer-item-header button {
+        background: none;
+        border: none;
+        font-size: 1.2rem;
+        cursor: pointer;
+        opacity: 0.7;
+        transition: opacity 0.2s;
+      }
+      .layer-item-header button:hover {
+        opacity: 1;
+      }
+      .layer-controls {
+        display: none;
+        flex-direction: column;
+        gap: 10px;
+        padding: 10px;
+        border-top: 1px solid var(--border-color);
+      }
+      .layer-item.active .layer-controls {
+        display: flex;
+      }
+      .control-group {
+        display: flex;
+        flex-direction: column;
+      }
+      .control-group label {
+        margin-bottom: 5px;
+        font-weight: 600;
+        font-size: 0.9rem;
+      }
+      .control-group select,
+      .control-group button,
+      .cloud-slider-container input {
+        width: 100%;
+        padding: 10px;
+        border-radius: 6px;
+        border: 1px solid var(--border-color);
+        cursor: pointer;
+        font-family: var(--font-family);
+        background-color: #fff;
+      }
+      .cloud-slider-container {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .cloud-slider-container input[type="range"] {
+        flex-grow: 1;
+        -webkit-appearance: none;
+        background: #e0e0e0;
+        height: 8px;
+        border-radius: 4px;
+        outline: none;
+      }
+      .cloud-slider-container input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: var(--primary-color);
+        cursor: pointer;
+        border: 2px solid #fff;
+      }
+      .cloud-slider-container span {
+        min-width: 30px;
+        text-align: right;
+        font-size: 0.9rem;
+      }
+      .apply-btn {
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        font-weight: bold;
+        transition: background-color 0.2s;
+      }
+      .apply-btn:hover {
+        background-color: #0056b3;
+      }
+      .legend-panel {
+        background: #f8f9fa;
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid var(--border-color);
+        margin-top: 10px;
+      }
+      .legend-panel h4 {
+        margin: 0 0 10px 0;
+        text-align: center;
+        font-size: 1rem;
+      }
+      .legend-item {
+        display: flex;
+        align-items: center;
+        margin-bottom: 5px;
+      }
+      .legend-color {
+        width: 20px;
+        height: 20px;
+        border: 1px solid var(--border-color);
+        margin-right: 10px;
+        border-radius: 3px;
+      }
+      #loading-spinner {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 3000;
+        display: none;
+        border: 8px solid #f3f3f3;
+        border-top: 8px solid var(--primary-color);
+        border-radius: 50%;
+        width: 60px;
+        height: 60px;
+        animation: spin 2s linear infinite;
+      }
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      .leaflet-control-container {
+          display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="main-container">
+      <div id="map-grid-container">
+        </div>
+      <div id="loading-spinner"></div>
+    </div>
+    
+    <div style="position: absolute; top: 15px; left: 15px; z-index: 1001; background: var(--panel-bg); padding: 15px; border-radius: 12px; box-shadow: var(--panel-shadow);">
+      <label for="select-views" style="font-weight: 600;">Layout:</label>
+      <select id="select-views" style="padding: 8px; border-radius: 6px; border: 1px solid var(--border-color);">
+        <option value="1">1 View</option>
+        <option value="2">2 Views</option>
+        <option value="4">4 Views</option>
+      </select>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+      // ======================================================================
+      // 🧠 GLOBAL STATE & MAP MANAGEMENT
+      // ======================================================================
+      const mapGridContainer = document.getElementById("map-grid-container");
+      let maps = [];
+      let layerData = []; // Manages all layers for all maps: layerData[mapId][layerId]
+      let countyList = [];
+      let nextLayerId = 0; // Global unique ID for each layer
+
+      // ======================================================================
+      // 🚀 ASYNCHRONOUS INITIALIZATION
+      // ======================================================================
+      async function initializeApplication() {
+        try {
+          const response = await fetch("/api/counties");
+          if (!response.ok) throw new Error("Server error fetching counties.");
+          countyList = await response.json();
+          updateMapLayout(1);
+          if (maps[0]) {
+            addLayer(0);
+          }
+        } catch (error) {
+          console.error("Failed to initialize application:", error);
+          alert(`Application startup failed: ${error.message}. Please check the server.`);
+        }
+      }
+
+      // ======================================================================
+      // 🗺️ MAP & UI LAYOUT FUNCTIONS
+      // ======================================================================
+      function updateMapLayout(numViews) {
+        mapGridContainer.innerHTML = "";
+        maps = [];
+        layerData = [];
+        let columns, rows;
+
+        if (numViews === 1) {
+          columns = "1fr";
+          rows = "1fr";
+        } else if (numViews === 2) {
+          columns = "1fr 1fr";
+          rows = "1fr";
+        } else if (numViews === 4) {
+          columns = "1fr 1fr";
+          rows = "1fr 1fr";
+        }
+
+        mapGridContainer.style.gridTemplateColumns = columns;
+        mapGridContainer.style.gridTemplateRows = rows;
+
+        for (let i = 0; i < numViews; i++) {
+          createMapView(i);
+        }
+        
+        synchronizeMaps();
+
+        setTimeout(() => maps.forEach(map => map.invalidateSize()), 100);
+      }
+      
+      function createMapView(id) {
+        const mapContainer = document.createElement("div");
+        mapContainer.className = "map-container";
+        mapContainer.id = `map-container-${id}`;
+        mapContainer.innerHTML = `<div id="map-${id}" class="leaflet-map"></div>`;
+        mapGridContainer.appendChild(mapContainer);
+
+        const map = L.map(`map-${id}`, {
+          zoomControl: false,
+          attributionControl: false
+        }).setView([-0.05, 37.65], 9);
+
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        maps[id] = map;
+        layerData[id] = {}; // Use an object for layers to avoid issues with splice/re-indexing
+        addTOC(id);
+      }
+
+      function addTOC(id) {
+        const mapContainer = document.getElementById(`map-container-${id}`);
+        const tocPanel = document.createElement("div");
+        tocPanel.className = "toc-panel";
+        tocPanel.id = `toc-${id}`;
+        tocPanel.innerHTML = `
+          <div class="toc-header">
+            <h4>View ${id + 1}</h4>
+            <button class="minimize-btn" onclick="toggleMinimize(${id})">➖</button>
+          </div>
+          <div class="toc-content">
+            <button class="apply-all-btn">Apply to All</button>
+            <button class="add-layer-btn">Add Layer</button>
+            <ul class="layer-list" id="layer-list-${id}"></ul>
+          </div>
+        `;
+        mapContainer.appendChild(tocPanel);
+
+        tocPanel.querySelector(".add-layer-btn").addEventListener("click", () => addLayer(id));
+        tocPanel.querySelector(".apply-all-btn").addEventListener("click", () => applyToAllMaps(id));
+      }
+
+      // ======================================================================
+      // 🎛️ LAYER MANAGEMENT & UI GENERATION
+      // ======================================================================
+      function createLayerItem(mapId, layerId) {
+        const item = document.createElement("li");
+        item.className = "layer-item active";
+        item.id = `layer-item-${mapId}-${layerId}`;
+        item.innerHTML = `
+          <div class="layer-item-header">
+            <input type="checkbox" checked onclick="toggleLayerVisibility(${mapId}, ${layerId})">
+            <span class="layer-name">Loading...</span>
+            <button class="remove-btn" onclick="removeLayer(${mapId}, ${layerId})">🗑️</button>
+          </div>
+          <div class="layer-controls">
+            <div class="control-group">
+              <label>County:</label>
+              <select class="select-county"></select>
+            </div>
+            <div class="control-group">
+              <label>Year:</label>
+              <select class="select-year"></select>
+            </div>
+            <div class="control-group">
+              <label>Enhancement:</label>
+              <select class="select-enhancement">
+                <option value="true_color">True Color (B4, B3, B2)</option>
+                <option value="false_color">False Color (B8, B4, B3)</option>
+                <option value="agriculture">Agriculture (B11, B8, B2)</option>
+                <option value="ndvi">NDVI</option>
+                <option value="moisture_index">Moisture Index</option>
+                <option value="urban">Urban (B12, B11, B4)</option>
+              </select>
+            </div>
+            <div class="control-group">
+              <label>Max Cloud Cover (%):</label>
+              <div class="cloud-slider-container">
+                <input type="range" class="cloud-cover" min="0" max="100" value="10" />
+                <span class="cloud-value">10</span>
+              </div>
+            </div>
+            <button class="apply-btn">Apply</button>
+            <div class="legend-panel">
+              <h4 class="legend-title">Legend</h4>
+              <div class="legend-classes"></div>
+            </div>
+          </div>
+        `;
+        return item;
+      }
+      
+      function updateLayerItem(item, mapId, layerId) {
+        const controls = item.querySelector('.layer-controls');
+        const countySelect = controls.querySelector(".select-county");
+        countySelect.innerHTML = '<option value="">Meru (Default)</option>';
+        countyList.forEach(county => {
+          const option = document.createElement("option");
+          option.value = county;
+          option.text = county;
+          countySelect.appendChild(option);
+        });
+
+        const yearSelect = controls.querySelector(".select-year");
+        yearSelect.innerHTML = "";
+        const currentYear = new Date().getFullYear();
+        for (let i = currentYear; i >= 2018; i--) {
+          const option = document.createElement("option");
+          option.value = i;
+          option.text = i;
+          yearSelect.appendChild(option);
+        }
+
+        const cloudSlider = controls.querySelector(".cloud-cover");
+        const cloudValueSpan = controls.querySelector(".cloud-value");
+        cloudSlider.oninput = function () {
+          cloudValueSpan.textContent = this.value;
+        };
+
+        controls.querySelector(".apply-btn").addEventListener("click", () => applyAnalysis(mapId, layerId));
+      }
+
+      function addLayer(mapId) {
+        const layerId = nextLayerId;
+        const layerItem = createLayerItem(mapId, layerId);
+        document.getElementById(`layer-list-${mapId}`).appendChild(layerItem);
+
+        layerData[mapId][layerId] = { 
+          id: layerId, 
+          leafletLayer: null, 
+          name: `Layer ${layerId + 1}`,
+          visible: true
+        };
+        updateLayerItem(layerItem, mapId, layerId);
+        
+        setActiveLayer(mapId, layerId);
+        nextLayerId++;
+      }
+      
+      function setActiveLayer(mapId, layerId) {
+        const toc = document.getElementById(`toc-${mapId}`);
+        toc.querySelectorAll('.layer-item').forEach(item => item.classList.remove('active'));
+        const activeItem = document.getElementById(`layer-item-${mapId}-${layerId}`);
+        if (activeItem) {
+          activeItem.classList.add('active');
+        }
+      }
+
+      // ======================================================================
+      // 📊 DATA FETCHING & ANALYSIS
+      // ======================================================================
+      async function applyAnalysis(mapId, layerId) {
+        const layerItem = document.getElementById(`layer-item-${mapId}-${layerId}`);
+        const controls = layerItem.querySelector('.layer-controls');
+        
+        const countyName = controls.querySelector(".select-county").value;
+        const year = controls.querySelector(".select-year").value;
+        const enhancement = controls.querySelector(".select-enhancement").value;
+        const cloudCover = controls.querySelector(".cloud-cover").value;
+
+        let bands;
+        switch(enhancement) {
+          case "true_color": bands = ["B4", "B3", "B2"]; break;
+          case "false_color": bands = ["B8", "B4", "B3"]; break;
+          case "agriculture": bands = ["B11", "B8", "B2"]; break;
+          case "urban": bands = ["B12", "B11", "B4"]; break;
+          default: bands = ["B4", "B3", "B2"];
+        }
+
+        const spinner = document.getElementById("loading-spinner");
+        spinner.style.display = "block";
+
+        try {
+          if (layerData[mapId][layerId].leafletLayer) {
+            maps[mapId].removeLayer(layerData[mapId][layerId].leafletLayer);
+          }
+
+          const response = await fetch("/api/sentinel", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ year, bands, enhancement, countyName, cloudCover }),
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error);
+          }
+
+          const data = await response.json();
+          const tileUrl = `https://earthengine.googleapis.com/v1alpha/${data.mapId.mapid}/tiles/{z}/{x}/{y}`;
+
+          const newLayer = L.tileLayer(tileUrl, {
+            attribution: "Google Earth Engine | Sentinel-2"
+          }).addTo(maps[mapId]);
+
+          layerData[mapId][layerId].leafletLayer = newLayer;
+          layerData[mapId][layerId].name = `${enhancement.toUpperCase()} (${year})`;
+          layerData[mapId][layerId].visible = true;
+
+          layerItem.querySelector('.layer-name').textContent = layerData[mapId][layerId].name;
+          displayLegend(controls, data.legendInfo);
+
+        } catch (error) {
+          console.error("Fetch error:", error);
+          alert(`Analysis failed for layer ${layerId + 1}: ${error.message}`);
+        } finally {
+          spinner.style.display = "none";
+        }
+      }
+      
+      // ======================================================================
+      // 🧩 UTILITY & EVENT HANDLERS
+      // ======================================================================
+      function synchronizeMaps() {
+        if (maps.length <= 1) return;
+        maps.forEach(map => {
+          map.off('move');
+          map.off('zoom');
+        });
+
+        maps[0].on('move', (e) => {
+          const center = e.target.getCenter();
+          maps.slice(1).forEach(m => m.setView(center, m.getZoom(), { animate: false }));
+        });
+        maps[0].on('zoom', (e) => {
+          const zoom = e.target.getZoom();
+          maps.slice(1).forEach(m => m.setZoom(zoom, { animate: false }));
+        });
+      }
+
+      function applyToAllMaps(sourceMapId) {
+        const sourceMapLayer = Object.values(layerData[sourceMapId]).find(l => document.getElementById(`layer-item-${sourceMapId}-${l.id}`).classList.contains('active'));
+        if (!sourceMapLayer) {
+            alert("Please select a layer to apply to all maps.");
+            return;
+        }
+
+        const sourceItem = document.getElementById(`layer-item-${sourceMapId}-${sourceMapLayer.id}`);
+        const sourceControls = sourceItem.querySelector('.layer-controls');
+
+        const params = {
+          countyName: sourceControls.querySelector(".select-county").value,
+          year: sourceControls.querySelector(".select-year").value,
+          enhancement: sourceControls.querySelector(".select-enhancement").value,
+          cloudCover: sourceControls.querySelector(".cloud-cover").value,
+        };
+
+        maps.forEach((map, i) => {
+          if (i !== sourceMapId) {
+            const targetLayers = Object.values(layerData[i]);
+            if (targetLayers.length > 0) {
+              const targetLayer = targetLayers[0];
+              const targetControls = document.getElementById(`layer-item-${i}-${targetLayer.id}`).querySelector('.layer-controls');
+              
+              targetControls.querySelector(".select-county").value = params.countyName;
+              targetControls.querySelector(".select-year").value = params.year;
+              targetControls.querySelector(".select-enhancement").value = params.enhancement;
+              targetControls.querySelector(".cloud-cover").value = params.cloudCover;
+              targetControls.querySelector(".cloud-value").textContent = params.cloudCover;
+              
+              applyAnalysis(i, targetLayer.id);
+            } else {
+              // If the map has no layers, create one and apply
+              addLayer(i);
+              setTimeout(() => {
+                const newLayerId = nextLayerId - 1;
+                const newControls = document.getElementById(`layer-item-${i}-${newLayerId}`).querySelector('.layer-controls');
+                newControls.querySelector(".select-county").value = params.countyName;
+                newControls.querySelector(".select-year").value = params.year;
+                newControls.querySelector(".select-enhancement").value = params.enhancement;
+                newControls.querySelector(".cloud-cover").value = params.cloudCover;
+                newControls.querySelector(".cloud-value").textContent = params.cloudCover;
+                applyAnalysis(i, newLayerId);
+              }, 500); // Small delay to allow DOM to update
+            }
+          }
+        });
+      }
+      
+      window.toggleMinimize = function(id) {
+          const tocPanel = document.getElementById(`toc-${id}`);
+          const tocContent = tocPanel.querySelector(".toc-content");
+          const minimizeBtn = tocPanel.querySelector(".minimize-btn");
+          tocContent.style.display = tocContent.style.display === 'none' ? 'flex' : 'none';
+          minimizeBtn.textContent = tocContent.style.display === 'none' ? '➕' : '➖';
+      };
+
+      window.toggleLayerVisibility = function(mapId, layerId) {
+        const layer = layerData[mapId][layerId];
+        if (!layer.leafletLayer) return;
+        if (maps[mapId].hasLayer(layer.leafletLayer)) {
+          maps[mapId].removeLayer(layer.leafletLayer);
+        } else {
+          maps[mapId].addLayer(layer.leafletLayer);
+        }
+      };
+
+      window.removeLayer = function(mapId, layerId) {
+        const layerItem = document.getElementById(`layer-item-${mapId}-${layerId}`);
+        const layer = layerData[mapId][layerId];
+        if (layer && layer.leafletLayer) {
+          maps[mapId].removeLayer(layer.leafletLayer);
+        }
+        if (layerItem) {
+          layerItem.remove();
+        }
+        delete layerData[mapId][layerId];
+      };
+      
+      function displayLegend(layerControls, legendInfo) {
+        const legendPanel = layerControls.querySelector(".legend-panel");
+        const legendTitle = legendPanel.querySelector(".legend-title");
+        const legendClasses = legendPanel.querySelector(".legend-classes");
+
+        legendTitle.textContent = legendInfo.title || 'Legend';
+        legendClasses.innerHTML = "";
+
+        if (legendInfo.classes && legendInfo.classes.length > 0) {
+          legendInfo.classes.forEach(item => {
+            const legendItem = document.createElement("div");
+            legendItem.className = "legend-item";
+            const colorBox = document.createElement("div");
+            colorBox.className = "legend-color";
+            colorBox.style.backgroundColor = item.color;
+            const label = document.createElement("span");
+            label.textContent = item.label;
+            legendItem.appendChild(colorBox);
+            legendItem.appendChild(label);
+            legendClasses.appendChild(legendItem);
+          });
+          legendPanel.style.display = "block";
+        } else if (legendInfo.description) {
+          legendClasses.innerHTML = `<p style="font-style: italic; font-size: 0.8em; margin: 0;">${legendInfo.description}</p>`;
+          legendPanel.style.display = "block";
+        } else {
+          legendPanel.style.display = "none";
+        }
+      }
+
+      initializeApplication();
+    </script>
+  </body>
+</html>
