@@ -1,0 +1,4021 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Professional GIS Dashboard</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        html {
+            height: 100%;
+        }
+
+        .dashboard-container {
+            display: flex;
+            height: 100%;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        }
+
+        .sidebar {
+            width: 350px;
+            background: linear-gradient(180deg, #1e293b 0%, #334155 100%);
+            border-right: 1px solid #475569;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3);
+            position: relative;
+            z-index: 1000;
+        }
+
+        .sidebar::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background:
+                radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.1) 0%, transparent 50%);
+            pointer-events: none;
+        }
+
+        .header {
+            padding: 24px;
+            border-bottom: 1px solid #475569;
+            position: relative;
+            z-index: 1;
+        }
+
+        .header h1 {
+            margin: 0 0 8px 0;
+            font-size: 1.5em;
+            font-weight: 700;
+            background: linear-gradient(135deg, #3b82f6 0%, #a855f7 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header .org {
+            font-size: 0.9em;
+            color: #94a3b8;
+            font-weight: 500;
+        }
+
+        .controls-section {
+            flex: 1;
+            padding: 24px;
+            overflow-y: auto;
+            position: relative;
+            z-index: 1;
+        }
+
+        .controls-section::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .controls-section::-webkit-scrollbar-track {
+            background: rgba(71, 85, 105, 0.3);
+            border-radius: 3px;
+        }
+
+        .controls-section::-webkit-scrollbar-thumb {
+            background: rgba(59, 130, 246, 0.5);
+            border-radius: 3px;
+        }
+
+        .section-title {
+            font-size: 1.1em;
+            font-weight: 600;
+            margin: 0 0 16px 0;
+            color: #f1f5f9;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .basemap-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 32px;
+        }
+
+        .basemap-card {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid #475569;
+            border-radius: 12px;
+            padding: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .basemap-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.1), transparent);
+            transition: left 0.5s;
+        }
+
+        .basemap-card:hover::before {
+            left: 100%;
+        }
+
+        .basemap-card:hover {
+            border-color: #3b82f6;
+            background: rgba(59, 130, 246, 0.1);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.2);
+        }
+
+        .basemap-card.active {
+            border-color: #3b82f6;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(168, 85, 247, 0.2));
+            box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
+        }
+
+        .basemap-card.active::before {
+            display: none;
+        }
+
+        .basemap-icon {
+            font-size: 1.5em;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .basemap-name {
+            font-size: 0.85em;
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+
+        .stats-panel {
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid #475569;
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.2em;
+            font-weight: 700;
+            color: #3b82f6;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 0.8em;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .top-bar {
+            background: rgba(30, 41, 59, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid #475569;
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+        }
+
+        .breadcrumb {
+            font-size: 0.9em;
+            color: #94a3b8;
+        }
+
+        .breadcrumb .current {
+            color: #3b82f6;
+            font-weight: 600;
+        }
+
+        .map-info {
+            display: flex;
+            gap: 24px;
+            font-size: 0.85em;
+            color: #94a3b8;
+            font-family: 'Courier New', monospace;
+        }
+
+        .map-container {
+            flex: 1;
+            position: relative;
+            background: #0f172a;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        .map-overlay {
+            position: absolute;
+            bottom: 24px;
+            left: 24px;
+            right: 24px;
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(10px);
+            border: 1px solid #475569;
+            border-radius: 12px;
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .coordinates {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #e2e8f0;
+        }
+
+        .map-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        .action-btn {
+            padding: 8px 16px;
+            border: 1px solid #475569;
+            border-radius: 6px;
+            background: rgba(30, 41, 59, 0.8);
+            color: #e2e8f0;
+            font-size: 0.8em;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .action-btn:hover {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: #3b82f6;
+        }
+
+        /* Movable Popup Styles */
+        .movable-popup {
+            position: absolute;
+            background: rgba(30, 41, 59, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid #475569;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            cursor: move;
+            max-width: 400px;
+            min-width: 300px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            animation: popupMorph 0.4s ease-out;
+        }
+
+        /* Time Slider Styles */
+        .time-slider-container {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid #475569;
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        .time-slider-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .time-slider-title {
+            font-size: 1em;
+            font-weight: 600;
+            color: #f1f5f9;
+        }
+
+        .time-slider-date {
+            font-size: 0.8em;
+            color: #94a3b8;
+            font-family: 'Courier New', monospace;
+        }
+
+        .time-slider {
+            width: 100%;
+            height: 8px;
+            border-radius: 4px;
+            background: rgba(71, 85, 105, 0.5);
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
+            margin-bottom: 12px;
+        }
+
+        .time-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+            transition: all 0.2s;
+        }
+
+        .time-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+            box-shadow: 0 4px 16px rgba(59, 130, 246, 0.6);
+        }
+
+        .time-slider-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .time-slider-btn {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #475569;
+            border-radius: 6px;
+            background: rgba(30, 41, 59, 0.8);
+            color: #e2e8f0;
+            font-size: 0.8em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .time-slider-btn:hover {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: #3b82f6;
+            transform: translateY(-1px);
+        }
+
+        /* Enhanced County Controls */
+        .county-controls-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 12px;
+        }
+
+        .county-controls-grid::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .county-controls-grid::-webkit-scrollbar-thumb {
+            background: rgba(59, 130, 246, 0.5);
+            border-radius: 2px;
+        }
+
+        .county-control-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid #475569;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .county-control-item:hover {
+            background: rgba(59, 130, 246, 0.1);
+            border-color: #3b82f6;
+            transform: translateY(-1px);
+        }
+
+        .county-control-item.active {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: #3b82f6;
+        }
+
+        .county-color-indicator {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            margin-right: 8px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .county-name {
+            font-size: 0.8em;
+            color: #e2e8f0;
+            font-weight: 500;
+        }
+
+        .county-checkbox {
+            margin-right: 8px;
+            accent-color: #3b82f6;
+        }
+
+        /* NDVI Statistics Styles */
+        .time-btn {
+            padding: 6px 12px;
+            border: 1px solid #475569;
+            border-radius: 6px;
+            background: rgba(30, 41, 59, 0.8);
+            color: #e2e8f0;
+            font-size: 0.8em;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .time-btn:hover {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: #3b82f6;
+        }
+
+        .time-btn.selected {
+            background: rgba(59, 130, 246, 0.4);
+            border-color: #3b82f6;
+            color: #ffffff;
+        }
+
+        #stats-results {
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid #475569;
+            border-radius: 8px;
+            padding: 16px;
+        }
+
+        .stats-chart {
+            width: 100%;
+            height: 200px;
+            background: rgba(15, 23, 42, 0.8);
+            border-radius: 6px;
+            margin: 12px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #94a3b8;
+            font-size: 0.9em;
+        }
+
+        .stats-summary {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 12px;
+        }
+
+        .stat-box {
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid #3b82f6;
+            border-radius: 6px;
+            padding: 12px;
+            text-align: center;
+        }
+
+        .stat-value-large {
+            font-size: 1.4em;
+            font-weight: 700;
+            color: #3b82f6;
+            margin-bottom: 4px;
+        }
+
+        .stat-label-small {
+            font-size: 0.8em;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Time Slider Styles */
+        .time-slider-container {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid #475569;
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        .time-slider-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .time-slider-title {
+            font-size: 1em;
+            font-weight: 600;
+            color: #f1f5f9;
+        }
+
+        .time-slider-date {
+            font-size: 0.8em;
+            color: #94a3b8;
+            font-family: 'Courier New', monospace;
+        }
+
+        .time-slider {
+            width: 100%;
+            height: 8px;
+            border-radius: 4px;
+            background: rgba(71, 85, 105, 0.5);
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
+            margin-bottom: 12px;
+        }
+
+        .time-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+            transition: all 0.2s;
+        }
+
+        .time-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+            box-shadow: 0 4px 16px rgba(59, 130, 246, 0.6);
+        }
+
+        .time-slider-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .time-slider-btn {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #475569;
+            border-radius: 6px;
+            background: rgba(30, 41, 59, 0.8);
+            color: #e2e8f0;
+            font-size: 0.8em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .time-slider-btn:hover {
+            background: rgba(59, 130, 246, 0.2);
+            border-color: #3b82f6;
+            transform: translateY(-1px);
+        }
+
+        /* Modern Basemap Selector */
+        .basemap-selector-modern {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            border: 1px solid #475569;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            cursor: move;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            min-width: 280px;
+        }
+
+        .basemap-selector-modern.dragging {
+            opacity: 0.8;
+            transform: scale(1.02);
+        }
+
+        .basemap-selector-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .basemap-selector-title {
+            font-size: 0.9em;
+            font-weight: 600;
+            color: #f1f5f9;
+        }
+
+        .basemap-selector-toggle {
+            background: rgba(59, 130, 246, 0.2);
+            border: 1px solid #3b82f6;
+            border-radius: 6px;
+            padding: 6px 10px;
+            color: #e2e8f0;
+            font-size: 0.8em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .basemap-selector-toggle:hover {
+            background: rgba(59, 130, 246, 0.3);
+        }
+
+        .basemap-grid-modern {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+        }
+
+        .basemap-grid-modern.hidden {
+            display: none;
+        }
+
+        .basemap-option-modern {
+            width: 50px;
+            height: 50px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .basemap-option-modern.active {
+            border-color: #3b82f6;
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+        }
+
+        .basemap-option-modern:hover {
+            transform: scale(1.05);
+        }
+
+        .basemap-option-modern img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .basemap-option-modern::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.7em;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+            z-index: 1001;
+        }
+
+        .basemap-option-modern:hover::after {
+            opacity: 1;
+        }
+
+        @media (max-width: 768px) {
+            .basemap-selector-modern {
+                bottom: 10px;
+                left: 10px;
+                min-width: 250px;
+                padding: 12px;
+            }
+
+            .basemap-grid-modern {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 6px;
+            }
+
+            .basemap-option-modern {
+                width: 45px;
+                height: 45px;
+            }
+        }
+
+        @keyframes popupMorph {
+            0% { opacity: 0; transform: scale(0.8) translateY(-20px); }
+            100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        .popup-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            cursor: move;
+            padding: 4px;
+        }
+
+        .popup-title {
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #f1f5f9;
+            margin: 0;
+        }
+
+        .popup-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .popup-btn {
+            width: 28px;
+            height: 28px;
+            border: none;
+            border-radius: 6px;
+            background: #475569;
+            color: #e2e8f0;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+
+        .popup-btn:hover {
+            background: #3b82f6;
+            transform: scale(1.1);
+        }
+
+        .popup-content {
+            color: #e2e8f0;
+        }
+
+        .popup-content label {
+            display: block;
+            margin-top: 12px;
+            font-weight: 600;
+            color: #f1f5f9;
+            margin-bottom: 6px;
+        }
+
+        .popup-content select,
+        .popup-content input[type="number"] {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #475569;
+            border-radius: 6px;
+            background: rgba(30, 41, 59, 0.8);
+            color: #e2e8f0;
+            font-size: 0.9em;
+        }
+
+        .popup-content select:focus,
+        .popup-content input[type="number"]:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        }
+
+        .county-list {
+            max-height: 150px;
+            overflow-y: auto;
+            margin-top: 12px;
+        }
+
+        .county-list::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .county-list::-webkit-scrollbar-thumb {
+            background: rgba(59, 130, 246, 0.5);
+            border-radius: 2px;
+        }
+
+        .county-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 6px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+
+        .county-item:hover {
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        .county-item input[type="checkbox"] {
+            margin-right: 8px;
+            accent-color: #3b82f6;
+        }
+
+        .county-item label {
+            font-size: 0.85em;
+            color: #e2e8f0;
+            cursor: pointer;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 10px 16px;
+            border: 1px solid #475569;
+            border-radius: 6px;
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            color: white;
+            font-size: 0.9em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 12px;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+        }
+
+        .btn.secondary {
+            background: linear-gradient(135deg, #10b981, #059669);
+        }
+
+        .btn.secondary:hover {
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+        }
+
+        .loader {
+            border: 4px solid rgba(71, 85, 105, 0.3);
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            margin: 15px auto;
+            display: none;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            color: #ef4444;
+            margin-top: 10px;
+            font-weight: bold;
+            font-size: 0.85em;
+        }
+
+        /* Legend Popup */
+        .legend-popup {
+            position: absolute;
+            background: rgba(30, 41, 59, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid #475569;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            cursor: move;
+            max-width: 280px;
+            min-width: 200px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            animation: popupMorph 0.4s ease-out;
+            color: #e2e8f0;
+        }
+
+        .legend-popup.fullscreen {
+            position: fixed !important;
+            top: 20px !important;
+            left: 20px !important;
+            right: 20px !important;
+            bottom: 20px !important;
+            width: auto !important;
+            height: auto !important;
+            max-width: none !important;
+            min-width: auto !important;
+            z-index: 9999;
+        }
+
+        .legend-popup.fullscreen .legend-item {
+            font-size: 1.2em;
+            padding: 8px 12px;
+        }
+
+        .legend-popup.fullscreen .color-box {
+            width: 24px;
+            height: 24px;
+        }
+
+        .legend-popup.fullscreen h4 {
+            font-size: 1.5em;
+        }
+
+        .legend-popup .close-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            background: #475569;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            color: #e2e8f0;
+        }
+
+        .legend-popup .close-btn:hover {
+            background: #3b82f6;
+            transform: scale(1.1);
+        }
+
+        .legend-popup.dragging {
+            opacity: 0.8;
+            transform: scale(1.02);
+        }
+
+        .legend-popup h4 {
+            margin: 0 0 12px 0;
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #f1f5f9;
+        }
+
+        .legend-subtitle {
+            font-size: 0.8em;
+            color: #94a3b8;
+            margin-bottom: 12px;
+            font-style: italic;
+        }
+
+        .legend-popup .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            padding: 4px 8px;
+            border-radius: 6px;
+            transition: background-color 0.2s ease;
+        }
+
+        .legend-popup .legend-item:hover {
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        .legend-popup .color-box {
+            width: 16px;
+            height: 16px;
+            margin-right: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+
+        .legend-popup .legend-desc {
+            font-style: italic;
+            color: #94a3b8;
+            margin-top: 8px;
+            font-size: 0.85em;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1024px) {
+            .sidebar {
+                width: 300px;
+            }
+
+            .basemap-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-container {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100%;
+                height: auto;
+                max-height: 40%;
+            }
+
+            .controls-section {
+                padding: 16px;
+            }
+
+            .basemap-grid {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 8px;
+            }
+
+            .basemap-card {
+                padding: 12px 8px;
+            }
+
+            .basemap-icon {
+                font-size: 1.2em;
+                margin-bottom: 4px;
+            }
+
+            .basemap-name {
+                font-size: 0.75em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="sidebar">
+            <div class="header">
+                <h1>🛰️ Geospatial Portal</h1>
+                <div class="org">
+                    Earth Engine Analytics
+                </div>
+            </div>
+            <div class="controls-section">
+                <div class="section-title">
+                    🗺 Basemap Layers
+                </div>
+                <div class="basemap-grid">
+                    <div class="basemap-card active" data-basemap="streets">
+                        <span class="basemap-icon">🛣</span>
+                        <div class="basemap-name">
+                            Streets
+                        </div>
+                    </div>
+                    <div class="basemap-card" data-basemap="satellite">
+                        <span class="basemap-icon">🛰</span>
+                        <div class="basemap-name">
+                            Satellite
+                        </div>
+                    </div>
+                    <div class="basemap-card" data-basemap="terrain">
+                        <span class="basemap-icon">⛰</span>
+                        <div class="basemap-name">
+                            Terrain
+                        </div>
+                    </div>
+                    <div class="basemap-card" data-basemap="topo">
+                        <span class="basemap-icon">🗺</span>
+                        <div class="basemap-name">
+                            Topographic
+                        </div>
+                    </div>
+                    <div class="basemap-card" data-basemap="dark">
+                        <span class="basemap-icon">🌙</span>
+                        <div class="basemap-name">
+                            Dark
+                        </div>
+                    </div>
+                    <div class="basemap-card" data-basemap="ocean">
+                        <span class="basemap-icon">🌊</span>
+                        <div class="basemap-name">
+                            Ocean
+                        </div>
+                    </div>
+                    <div class="basemap-card" data-basemap="esri_clarity">
+                        <span class="basemap-icon">🔍</span>
+                        <div class="basemap-name">
+                            Clarity
+                        </div>
+                    </div>
+                    <div class="basemap-card" data-basemap="esri_firefly">
+                        <span class="basemap-icon">🔥</span>
+                        <div class="basemap-name">
+                            Firefly
+                        </div>
+                    </div>
+                    <div class="basemap-card" data-basemap="esri_natgeo">
+                        <span class="basemap-icon">📍</span>
+                        <div class="basemap-name">
+                            Nat Geo
+                        </div>
+                    </div>
+                    <div class="basemap-card" data-basemap="watercolor">
+                        <span class="basemap-icon">🎨</span>
+                        <div class="basemap-name">
+                            Watercolor
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stats-panel">
+                    <div class="section-title">
+                        📊 Map Statistics
+                    </div>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-value" id="zoom-level">2</div>
+                            <div class="stat-label">Zoom Level</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="scale">1:295M</div>
+                            <div class="stat-label">Scale</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="layers-count">1</div>
+                            <div class="stat-label">Active Layers</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="projection">WGS84</div>
+                            <div class="stat-label">Projection</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="top-bar">
+                <div class="breadcrumb">
+                    Dashboard / <span class="current">Interactive Map</span>
+                </div>
+                <div class="map-info">
+                    <span id="current-basemap">Streets Basemap</span>
+                    <span>•</span>
+                    <span id="last-updated">Updated: Just now</span>
+                </div>
+            </div>
+            <div class="map-container">
+                <div id="map"></div>
+                <div class="map-overlay">
+                    <div class="coordinates" id="coordinates">
+                        📍 Lat: 20.0000, Lng: 0.0000
+                    </div>
+                    <div class="map-actions">
+                        <button class="action-btn" id="counties-btn">🏛️ Counties</button>
+                        <button class="action-btn" id="analysis-btn">🔬 Analysis</button>
+                        <button class="action-btn" id="tiles-btn">🛰️ Tiles</button>
+                        <button class="action-btn" id="stats-btn">📊 NDVI Stats</button>
+                        <button class="action-btn" id="fullscreen-btn">🔍 Fullscreen</button>
+                        <button class="action-btn" id="center-btn">🎯 Center</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+        h1 { color: #333; font-size: 1.5em; border-bottom: 2px solid #007bff; padding-bottom: 10px; margin-top: 0; }
+        label { display: block; margin-top: 15px; font-weight: 600; color: #555; }
+        select, input[type="number"] { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { background-color: #007bff; color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; margin-top: 20px; width: 100%; font-size: 1.1em; transition: background-color 0.3s ease; }
+        button:hover { background-color: #0056b3; }
+        .secondary-button { background-color: #28a745; margin-top: 10px; }
+        .secondary-button:hover { background-color: #1e7e34; }
+        #legend { margin-top: 25px; padding: 15px; border: 1px solid #ddd; border-radius: 5px; background-color: #f9f9f9; display: none; }
+        .legend-item { display: flex; align-items: center; margin-bottom: 5px; }
+        .color-box { width: 20px; height: 10px; margin-right: 10px; border: 1px solid #aaa; }
+        .legend-desc { font-style: italic; color: #777; margin-top: 5px; font-size: 0.9em; }
+        /* Modern Legend Popup */
+        .legend-popup {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            cursor: move;
+            max-width: 280px;
+            min-width: 200px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            animation: popupMorph 0.4s ease-out;
+        }
+
+        @keyframes popupMorph {
+            0% { opacity: 0; transform: scale(0.8) translateY(-20px); }
+            100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        .legend-popup .close-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            background: #e2e8f0;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .legend-popup .close-btn:hover {
+            background: #cbd5e0;
+            transform: scale(1.1);
+        }
+
+        .legend-popup.dragging {
+            opacity: 0.8;
+            transform: scale(1.02);
+        }
+
+        .legend-popup h4 {
+            margin: 0 0 12px 0;
+            font-size: 1.1em;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .legend-popup .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            padding: 4px 8px;
+            border-radius: 6px;
+            transition: background-color 0.2s ease;
+        }
+
+        .legend-popup .legend-item:hover {
+            background: rgba(0, 0, 0, 0.05);
+        }
+
+        .legend-popup .color-box {
+            width: 16px;
+            height: 16px;
+            margin-right: 10px;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-radius: 3px;
+        }
+
+        .legend-popup .legend-desc {
+            font-style: italic;
+            color: #718096;
+            margin-top: 8px;
+            font-size: 0.85em;
+        }
+
+        @media (max-width: 768px) {
+            .legend-popup {
+                max-width: 250px;
+                font-size: 0.9em;
+            }
+        }
+
+        /* Compact Basemap Selector */
+        .basemap-selector-compact {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            border: 1px solid #475569;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: move;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .basemap-selector-compact.dragging {
+            opacity: 0.8;
+            transform: scale(1.02);
+        }
+
+        .basemap-selector-compact .selector-toggle {
+            background: rgba(59, 130, 246, 0.2);
+            border: 1px solid #3b82f6;
+            border-radius: 6px;
+            padding: 6px 10px;
+            color: #e2e8f0;
+            font-size: 0.8em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .basemap-selector-compact .selector-toggle:hover {
+            background: rgba(59, 130, 246, 0.3);
+        }
+
+        .basemap-selector-compact .basemap-grid {
+            display: none;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+            margin-left: 8px;
+        }
+
+        .basemap-selector-compact.expanded .basemap-grid {
+            display: grid;
+        }
+
+        .basemap-selector-compact .basemap-option {
+            width: 40px;
+            height: 40px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .basemap-selector-compact .basemap-option.active {
+            border-color: #3b82f6;
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+        }
+
+        .basemap-selector-compact .basemap-option:hover {
+            transform: scale(1.05);
+        }
+
+        .basemap-selector-compact .basemap-option img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .basemap-selector-compact .basemap-option::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 3px 6px;
+            border-radius: 3px;
+            font-size: 0.7em;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+            z-index: 1001;
+        }
+
+        .basemap-selector-compact .basemap-option:hover::after {
+            opacity: 1;
+        }
+
+        @media (max-width: 768px) {
+            .basemap-selector-compact {
+                bottom: 10px;
+                left: 10px;
+                padding: 8px;
+            }
+
+            .basemap-selector-compact .basemap-option {
+                width: 35px;
+                height: 35px;
+            }
+        }
+
+        /* Status Bar Styles */
+        .status-bar {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 12px 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 0.85em;
+            min-width: 300px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #4a5568;
+        }
+
+        .status-label {
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .status-value {
+            font-family: 'Courier New', monospace;
+            background: rgba(0, 0, 0, 0.05);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.8em;
+        }
+
+        .live-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #48bb78;
+            box-shadow: 0 0 8px rgba(72, 187, 120, 0.6);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 8px rgba(72, 187, 120, 0.6); }
+            50% { box-shadow: 0 0 16px rgba(72, 187, 120, 0.8); }
+            100% { box-shadow: 0 0 8px rgba(72, 187, 120, 0.6); }
+        }
+
+        .coordinates-display {
+            font-family: 'Courier New', monospace;
+            background: rgba(0, 0, 0, 0.05);
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.8em;
+            min-width: 140px;
+            text-align: center;
+        }
+
+        @media (max-width: 768px) {
+            .status-bar {
+                bottom: 10px;
+                right: 10px;
+                min-width: 250px;
+                padding: 8px 12px;
+                gap: 12px;
+                font-size: 0.8em;
+            }
+
+            .coordinates-display {
+                min-width: 120px;
+                font-size: 0.75em;
+            }
+        }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #007bff; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; margin: 15px auto; display: none; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .error-message { color: red; margin-top: 10px; font-weight: bold; }
+        /* Style for the GeoJSON layer to show boundaries clearly */
+        .county-boundary {
+            opacity: 0.8;
+            stroke-width: 1px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <!-- Status Bar -->
+    <div class="status-bar" id="statusBar">
+        <div class="status-item">
+            <div class="live-indicator" id="liveIndicator"></div>
+            <span class="status-label">Live</span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">Time:</span>
+            <span class="status-value" id="currentTime">--:--:--</span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">CRS:</span>
+            <span class="status-value">EPSG:4326</span>
+        </div>
+        <div class="coordinates-display" id="coordinatesDisplay">
+            Lat: --.------ Lng: --.------
+        </div>
+    </div>
+
+    <!-- Compact Basemap Selector -->
+    <div class="basemap-selector-compact" id="basemapSelector">
+        <button class="selector-toggle" id="basemapToggle">Basemaps</button>
+        <div class="basemap-grid">
+            <div class="basemap-option active" data-map="streets" data-tooltip="Streets">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/6/6c/Openstreetmap_map.png" alt="Streets" />
+            </div>
+            <div class="basemap-option" data-map="satellite" data-tooltip="Satellite">
+                <img src="https://developers.google.com/static/maps/documentation/maps-static/images/satellite.png" alt="Satellite" />
+            </div>
+            <div class="basemap-option" data-map="terrain" data-tooltip="Terrain">
+                <img src="https://opentopomap.org/img/topo.png" alt="Terrain" />
+            </div>
+            <div class="basemap-option" data-map="topo" data-tooltip="Topographic">
+                <img src="https://services.arcgisonline.com/arcgis/rest/services/World_Topo_Map/MapServer/tile/5/10/18" alt="Topo" />
+            </div>
+            <div class="basemap-option" data-map="dark" data-tooltip="Dark">
+                <img src="https://cartodb-basemaps-a.global.ssl.fastly.net/dark_all/5/10/18.png" alt="Dark" />
+            </div>
+            <div class="basemap-option" data-map="ocean" data-tooltip="Ocean">
+                <img src="https://services.arcgisonline.com/arcgis/rest/services/Ocean/World_Ocean_Base/MapServer/tile/5/10/18" alt="Ocean" />
+            </div>
+            <div class="basemap-option" data-map="esri_clarity" data-tooltip="Clarity">
+                <img src="https://clarity.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/5/10/18" alt="Clarity" />
+            </div>
+            <div class="basemap-option" data-map="esri_firefly" data-tooltip="Firefly">
+                <img src="https://fly.maptiles.arcgis.com/arcgis/rest/services/World_Imagery_Firefly/MapServer/tile/5/10/18" alt="Firefly" />
+            </div>
+            <div class="basemap-option" data-map="esri_natgeo" data-tooltip="Nat Geo">
+                <img src="https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/5/10/18" alt="Nat Geo" />
+            </div>
+            <div class="basemap-option" data-map="watercolor" data-tooltip="Watercolor">
+                <img src="https://tiles.stadiamaps.com/tiles/stamen_watercolor/5/10/18.jpg" alt="Watercolor" />
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Control Panel -->
+    <div id="controls-panel">
+        <div class="panel-header">
+            <h1>🛰️ Geospatial Portal</h1>
+            <div class="panel-controls">
+                <button class="panel-btn" id="minimize-btn" title="Minimize">−</button>
+                <button class="panel-btn" id="expand-btn" title="Expand">⤢</button>
+            </div>
+        </div>
+        <div class="panel-content">
+            <div id="county-controls">
+                <label for="county-toggle">County Visibility:</label>
+                <button id="toggle-all-counties" class="secondary-button">Show All Counties</button>
+                <div id="county-checkboxes" style="max-height: 150px; overflow-y: auto; margin-top: 10px;"></div>
+            </div>
+
+            <button id="download-geojson-btn" class="secondary-button" disabled>
+                ⬇️ Download GeoJSON
+            </button>
+
+            <form id="analysis-form">
+                <label for="county-select">County/AOI:</label>
+                <select id="county-select" required>
+                    <option value="" disabled selected>Loading counties...</option>
+                </select>
+
+                <label for="year-input">Year:</label>
+                <select id="year-input" required>
+                    </select>
+
+                <label for="cloud-cover-input">Max Cloud Cover (%)</label>
+                <input type="number" id="cloud-cover-input" min="1" max="100" value="10" required>
+
+                <label for="enhancement-select">Analysis/Enhancement:</label>
+                <select id="enhancement-select" required>
+                    <option value="true_color">True Color (B4, B3, B2)</option>
+                    <option value="false_color">False Color (B8, B4, B3) - Vegetation</option>
+                    <option value="ndvi">NDVI (Normalized Difference Vegetation Index)</option>
+                    <option value="moisture_index">NDMI (Normalized Difference Moisture Index)</option>
+                    <option value="agriculture">Agriculture (B11, B8, B2)</option>
+                    <option value="urban">Urban (B12, B11, B4)</option>
+                </select>
+
+                <button type="submit" id="submit-btn">Generate Sentinel Map</button>
+
+                <div class="loader" id="loader"></div>
+                <div id="error-display" class="error-message"></div>
+            </form>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <script>
+        // ===================================================================
+        // 🗺️ MAP INITIALIZATION & BASEMAP LAYERS
+        // ===================================================================
+
+        // Define basemap layers
+        const baseLayers = {
+            streets: {
+                url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                attribution: '© OpenStreetMap contributors',
+                name: 'Streets Basemap'
+            },
+            satellite: {
+                url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                attribution: '© Esri, Maxar, Earthstar Geographics',
+                name: 'Satellite Imagery',
+                temporal: true
+            },
+            terrain: {
+                url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+                attribution: '© OpenTopoMap contributors',
+                name: 'Terrain Map'
+            },
+            topo: {
+                url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+                attribution: '© Esri, HERE, Garmin, SafeGraph',
+                name: 'Topographic Map'
+            },
+            dark: {
+                url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+                attribution: '© CARTO',
+                name: 'Dark Theme'
+            },
+            ocean: {
+                url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
+                attribution: '© Esri, GEBCO, NOAA',
+                name: 'Ocean Basemap'
+            },
+            esri_clarity: {
+                url: 'https://clarity.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                attribution: '© Esri, Maxar',
+                name: 'Clarity Imagery',
+                temporal: true
+            },
+            esri_firefly: {
+                url: 'https://fly.maptiles.arcgis.com/arcgis/rest/services/World_Imagery_Firefly/MapServer/tile/{z}/{y}/{x}',
+                attribution: '© Esri',
+                name: 'Firefly Imagery'
+            },
+            esri_natgeo: {
+                url: 'https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}',
+                attribution: '© Esri, National Geographic',
+                name: 'National Geographic'
+            },
+            watercolor: {
+                url: 'https://tiles.stadiamaps.com/tiles/stamen_watercolor/{z}/{x}/{y}.jpg',
+                attribution: '© Stamen Design, © Stadia Maps',
+                name: 'Watercolor Style'
+            }
+        };
+
+        // Initialize map with default basemap
+        const map = L.map('map', {
+            center: [-0.05, 37.65], // Default center (e.g., central Kenya)
+            zoom: 7,
+            minZoom: 2,
+            maxZoom: 18,
+            layers: [L.tileLayer(baseLayers.streets.url, { attribution: baseLayers.streets.attribution })] // Start with streets
+        });
+
+        let currentBaseLayer = L.tileLayer(baseLayers.streets.url, { attribution: baseLayers.streets.attribution });
+        let currentBasemap = 'streets';
+
+        let eeTileLayer = null; // Holds the Sentinel layer
+        let countyLayer = null; // Holds the GeoJSON county layer
+        let allCountyGeoJSON = null; // Stores the GeoJSON data once loaded
+        let countyCheckboxes = {}; // Stores checkbox states for counties
+        let legendPopup = null; // Holds the draggable legend popup
+        let countiesPopup = null; // Holds the counties popup
+        let analysisPopup = null; // Holds the analysis popup
+        let tilesPopup = null; // Holds the tiles popup
+        let statsPopup = null; // Holds the statistics popup
+        let landsatLayer = null; // Holds the Landsat layer
+        let landsatEnabled = false; // Whether Landsat tiles are enabled
+        let landsatYear = 2025; // Current Landsat year
+
+        // ===================================================================
+        // 🔄 UTILITY FUNCTIONS
+        // ===================================================================
+
+        const displayError = (message) => {
+            const errorDiv = document.querySelector('.error-message');
+            if (errorDiv) errorDiv.textContent = message;
+        }
+
+        const clearMapLayer = () => {
+            if (eeTileLayer) {
+                map.removeLayer(eeTileLayer);
+                eeTileLayer = null;
+            }
+        }
+
+        /** Styles the county features for display */
+        const styleCounty = (feature) => {
+            return {
+                fillColor: feature.properties.color || '#cccccc',
+                weight: 2,
+                opacity: 0.8,
+                color: 'black',
+                dashArray: '3',
+                fillOpacity: 0.5
+            };
+        }
+
+        /** Handles interaction with the GeoJSON layer (popup) */
+        const onEachFeature = (feature, layer) => {
+            if (feature.properties && feature.properties.COUNTY_NAM) {
+                const countyName = feature.properties.COUNTY_NAM;
+                const countyColor = feature.properties.color || '#cccccc';
+
+                // Create detailed popup content
+                const popupContent = document.createElement('div');
+                popupContent.style.cssText = `
+                    font-family: 'Segoe UI', sans-serif;
+                    max-width: 250px;
+                    color: #2d3748;
+                `;
+
+                popupContent.innerHTML = `
+                    <div style="border-bottom: 2px solid ${countyColor}; padding-bottom: 8px; margin-bottom: 12px;">
+                        <h3 style="margin: 0; font-size: 1.2em; color: #1a202c;">${countyName}</h3>
+                        <div style="display: flex; align-items: center; margin-top: 4px;">
+                            <div style="width: 12px; height: 12px; background: ${countyColor}; border-radius: 2px; margin-right: 6px;"></div>
+                            <span style="font-size: 0.85em; color: #718096;">County Color</span>
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 12px;">
+                        <p style="margin: 0 0 8px 0; font-size: 0.9em; color: #4a5568;">
+                            Click buttons below to interact with this county:
+                        </p>
+                    </div>
+                    <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                        <button class="county-action-btn" data-action="zoom" data-county="${countyName}"
+                                style="padding: 6px 10px; border: 1px solid #3b82f6; background: #3b82f6; color: white; border-radius: 4px; font-size: 0.8em; cursor: pointer;">
+                            🔍 Zoom
+                        </button>
+                        <button class="county-action-btn" data-action="analyze" data-county="${countyName}"
+                                style="padding: 6px 10px; border: 1px solid #10b981; background: #10b981; color: white; border-radius: 4px; font-size: 0.8em; cursor: pointer;">
+                            🔬 Analyze
+                        </button>
+                        <button class="county-action-btn" data-action="download" data-county="${countyName}"
+                                style="padding: 6px 10px; border: 1px solid #f59e0b; background: #f59e0b; color: white; border-radius: 4px; font-size: 0.8em; cursor: pointer;">
+                            ⬇️ Download
+                        </button>
+                    </div>
+                `;
+
+                // Add event listeners to buttons
+                setTimeout(() => {
+                    const buttons = popupContent.querySelectorAll('.county-action-btn');
+                    buttons.forEach(btn => {
+                        btn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            const action = btn.getAttribute('data-action');
+                            const county = btn.getAttribute('data-county');
+
+                            switch(action) {
+                                case 'zoom':
+                                    zoomToCounty(county);
+                                    layer.closePopup();
+                                    break;
+                                case 'analyze':
+                                    analyzeCounty(county);
+                                    layer.closePopup();
+                                    break;
+                                case 'download':
+                                    downloadCounty(county);
+                                    layer.closePopup();
+                                    break;
+                            }
+                        });
+                    });
+                }, 100);
+
+                layer.bindPopup(popupContent);
+            }
+        }
+
+        /** Creates and shows a modern draggable legend popup */
+        const showLegendPopup = (legendInfo) => {
+            // Remove existing popup
+            if (legendPopup) {
+                document.body.removeChild(legendPopup);
+            }
+
+            // Create new popup
+            legendPopup = document.createElement('div');
+            legendPopup.className = 'legend-popup';
+            legendPopup.style.right = '20px';
+            legendPopup.style.top = '200px';
+
+            // Header with drag handle
+            const header = document.createElement('div');
+            header.style.display = 'flex';
+            header.style.justifyContent = 'space-between';
+            header.style.alignItems = 'center';
+            header.style.marginBottom = '12px';
+            header.style.cursor = 'move';
+            header.style.padding = '4px';
+
+            const title = document.createElement('h4');
+            title.textContent = legendInfo.title;
+            title.style.margin = '0';
+
+            // Add subtitle with year and data source
+            const subtitle = document.createElement('div');
+            subtitle.className = 'legend-subtitle';
+            subtitle.textContent = `Sentinel-2 Data • ${new Date().getFullYear()} • Real-time Analysis`;
+            subtitle.style.cssText = `
+                font-size: 0.8em;
+                color: #94a3b8;
+                margin-bottom: 12px;
+                font-style: italic;
+                text-align: center;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                padding-bottom: 8px;
+            `;
+
+            const buttonContainer = document.createElement('div');
+            buttonContainer.style.display = 'flex';
+            buttonContainer.style.gap = '4px';
+
+            const expandBtn = document.createElement('button');
+            expandBtn.className = 'close-btn';
+            expandBtn.textContent = '⛶';
+            expandBtn.title = 'Expand to fullscreen';
+            expandBtn.onclick = () => {
+                legendPopup.classList.toggle('fullscreen');
+                expandBtn.textContent = legendPopup.classList.contains('fullscreen') ? '⛶' : '⛶';
+                expandBtn.title = legendPopup.classList.contains('fullscreen') ? 'Exit fullscreen' : 'Expand to fullscreen';
+            };
+
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'close-btn';
+            closeBtn.textContent = '×';
+            closeBtn.onclick = () => {
+                if (legendPopup) {
+                    legendPopup.style.animation = 'popupMorph 0.3s ease-in reverse';
+                    setTimeout(() => {
+                        if (legendPopup) {
+                            document.body.removeChild(legendPopup);
+                            legendPopup = null;
+                        }
+                    }, 300);
+                }
+            };
+
+            buttonContainer.appendChild(expandBtn);
+            buttonContainer.appendChild(closeBtn);
+            header.appendChild(title);
+            header.appendChild(buttonContainer);
+            legendPopup.appendChild(header);
+
+            // Add subtitle
+            legendPopup.appendChild(subtitle);
+
+            // Classes in a clean list layout
+            if (legendInfo.classes && legendInfo.classes.length > 0) {
+                legendInfo.classes.forEach(cls => {
+                    const item = document.createElement('div');
+                    item.className = 'legend-item';
+
+                    const colorBox = document.createElement('div');
+                    colorBox.className = 'color-box';
+                    colorBox.style.backgroundColor = cls.color;
+
+                    const label = document.createElement('span');
+                    label.textContent = cls.label;
+                    label.style.fontSize = '0.85em';
+                    label.style.fontWeight = '500';
+                    label.style.marginLeft = '10px';
+
+                    item.appendChild(colorBox);
+                    item.appendChild(label);
+                    legendPopup.appendChild(item);
+                });
+            } else {
+                const desc = document.createElement('p');
+                desc.className = 'legend-desc';
+                desc.textContent = legendInfo.description || 'No additional information available.';
+                legendPopup.appendChild(desc);
+            }
+
+            // Make draggable with smooth animations
+            let isDragging = false;
+            let dragOffsetX = 0;
+            let dragOffsetY = 0;
+
+            header.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                dragOffsetX = e.clientX - legendPopup.offsetLeft;
+                dragOffsetY = e.clientY - legendPopup.offsetTop;
+                legendPopup.classList.add('dragging');
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (isDragging) {
+                    const newLeft = e.clientX - dragOffsetX;
+                    const newTop = e.clientY - dragOffsetY;
+
+                    // Keep popup within viewport bounds
+                    const maxLeft = window.innerWidth - legendPopup.offsetWidth;
+                    const maxTop = window.innerHeight - legendPopup.offsetHeight;
+
+                    legendPopup.style.left = Math.max(0, Math.min(newLeft, maxLeft)) + 'px';
+                    legendPopup.style.top = Math.max(0, Math.min(newTop, maxTop)) + 'px';
+                    legendPopup.style.right = 'auto';
+                    legendPopup.style.bottom = 'auto';
+                }
+            });
+
+            document.addEventListener('mouseup', () => {
+                isDragging = false;
+                legendPopup.classList.remove('dragging');
+            });
+
+            document.body.appendChild(legendPopup);
+        }
+
+        /** Creates a movable popup for counties */
+        const createCountiesPopup = () => {
+            if (countiesPopup) return;
+
+            countiesPopup = document.createElement('div');
+            countiesPopup.className = 'movable-popup';
+            countiesPopup.style.left = '20px';
+            countiesPopup.style.bottom = '20px';
+
+            const header = document.createElement('div');
+            header.className = 'popup-header';
+
+            const title = document.createElement('h3');
+            title.className = 'popup-title';
+            title.textContent = '🏛️ County Controls';
+
+            const controls = document.createElement('div');
+            controls.className = 'popup-controls';
+
+            const minimizeBtn = document.createElement('button');
+            minimizeBtn.className = 'popup-btn';
+            minimizeBtn.textContent = '−';
+            minimizeBtn.onclick = () => {
+                const content = countiesPopup.querySelector('.popup-content');
+                content.style.display = content.style.display === 'none' ? 'block' : 'none';
+                minimizeBtn.textContent = content.style.display === 'none' ? '+' : '−';
+            };
+
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'popup-btn';
+            closeBtn.textContent = '×';
+            closeBtn.onclick = () => {
+                document.body.removeChild(countiesPopup);
+                countiesPopup = null;
+            };
+
+            controls.appendChild(minimizeBtn);
+            controls.appendChild(closeBtn);
+            header.appendChild(title);
+            header.appendChild(controls);
+            countiesPopup.appendChild(header);
+
+            const content = document.createElement('div');
+            content.className = 'popup-content';
+
+            // Master toggle for all counties
+            const masterToggle = document.createElement('div');
+            masterToggle.style.cssText = 'display: flex; align-items: center; margin-bottom: 16px; padding: 12px; background: rgba(30, 41, 59, 0.5); border-radius: 8px;';
+
+            const masterCheckbox = document.createElement('input');
+            masterCheckbox.type = 'checkbox';
+            masterCheckbox.id = 'master-counties-toggle';
+            masterCheckbox.style.cssText = 'margin-right: 12px; accent-color: #3b82f6; transform: scale(1.2);';
+            masterCheckbox.checked = Object.values(countyCheckboxes).some(checked => checked);
+            masterCheckbox.addEventListener('change', () => {
+                const isChecked = masterCheckbox.checked;
+                Object.keys(countyCheckboxes).forEach(county => {
+                    countyCheckboxes[county] = isChecked;
+                    const checkbox = document.querySelector(`#county-${county}`);
+                    if (checkbox) checkbox.checked = isChecked;
+                });
+                updateCountyLayer();
+            });
+
+            const masterLabel = document.createElement('label');
+            masterLabel.htmlFor = 'master-counties-toggle';
+            masterLabel.textContent = masterCheckbox.checked ? 'Hide All Counties' : 'Show All Counties';
+            masterLabel.style.cssText = 'font-size: 1em; color: #f1f5f9; cursor: pointer; font-weight: 600;';
+
+            masterCheckbox.addEventListener('change', () => {
+                masterLabel.textContent = masterCheckbox.checked ? 'Hide All Counties' : 'Show All Counties';
+            });
+
+            masterToggle.appendChild(masterCheckbox);
+            masterToggle.appendChild(masterLabel);
+            content.appendChild(masterToggle);
+
+            // Individual county controls
+            const countyList = document.createElement('div');
+            countyList.className = 'county-list';
+
+            // Load counties if not loaded yet
+            if (!allCountyGeoJSON) {
+                fetch('/api/counties/geojson')
+                    .then(response => response.json())
+                    .then(data => {
+                        allCountyGeoJSON = data.geojson;
+                        populateCountyList(countyList);
+                    })
+                    .catch(error => console.error('Error loading counties:', error));
+            } else {
+                populateCountyList(countyList);
+            }
+
+            content.appendChild(countyList);
+            countiesPopup.appendChild(content);
+
+            // Make draggable
+            let isDragging = false;
+            let dragOffsetX = 0;
+            let dragOffsetY = 0;
+
+            header.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                dragOffsetX = e.clientX - countiesPopup.offsetLeft;
+                dragOffsetY = e.clientY - countiesPopup.offsetTop;
+                countiesPopup.style.cursor = 'grabbing';
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (isDragging) {
+                    const newLeft = e.clientX - dragOffsetX;
+                    const newTop = e.clientY - dragOffsetY;
+
+                    const maxLeft = window.innerWidth - countiesPopup.offsetWidth;
+                    const maxTop = window.innerHeight - countiesPopup.offsetHeight;
+
+                    countiesPopup.style.left = Math.max(0, Math.min(newLeft, maxLeft)) + 'px';
+                    countiesPopup.style.top = Math.max(0, Math.min(newTop, maxTop)) + 'px';
+                }
+            });
+
+            document.addEventListener('mouseup', () => {
+                isDragging = false;
+                countiesPopup.style.cursor = 'default';
+            });
+
+            document.body.appendChild(countiesPopup);
+        };
+
+        /** Creates a movable popup for filters */
+        const createFiltersPopup = () => {
+            if (filtersPopup) return;
+
+            filtersPopup = document.createElement('div');
+            filtersPopup.className = 'movable-popup';
+            filtersPopup.style.left = '50px';
+            filtersPopup.style.top = '100px';
+
+            const header = document.createElement('div');
+            header.className = 'popup-header';
+
+            const title = document.createElement('h3');
+            title.className = 'popup-title';
+            title.textContent = '🎛️ County Filters';
+
+            const controls = document.createElement('div');
+            controls.className = 'popup-controls';
+
+            const minimizeBtn = document.createElement('button');
+            minimizeBtn.className = 'popup-btn';
+            minimizeBtn.textContent = '−';
+            minimizeBtn.onclick = () => {
+                const content = filtersPopup.querySelector('.popup-content');
+                content.style.display = content.style.display === 'none' ? 'block' : 'none';
+                minimizeBtn.textContent = content.style.display === 'none' ? '+' : '−';
+            };
+
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'popup-btn';
+            closeBtn.textContent = '×';
+            closeBtn.onclick = () => {
+                document.body.removeChild(filtersPopup);
+                filtersPopup = null;
+            };
+
+            controls.appendChild(minimizeBtn);
+            controls.appendChild(closeBtn);
+            header.appendChild(title);
+            header.appendChild(controls);
+            filtersPopup.appendChild(header);
+
+            const content = document.createElement('div');
+            content.className = 'popup-content';
+
+
+            // County Controls Section
+            const countyControlsSection = document.createElement('div');
+            countyControlsSection.style.cssText = 'margin-bottom: 16px;';
+
+            const countyControlsTitle = document.createElement('div');
+            countyControlsTitle.style.cssText = 'font-size: 1em; font-weight: 600; color: #f1f5f9; margin-bottom: 8px;';
+            countyControlsTitle.textContent = '🏛️ County Controls';
+            countyControlsSection.appendChild(countyControlsTitle);
+
+            // Show/Hide All buttons
+            const buttonContainer = document.createElement('div');
+            buttonContainer.style.cssText = 'display: flex; gap: 8px; margin-bottom: 12px;';
+
+            const showAllBtn = document.createElement('button');
+            showAllBtn.className = 'btn';
+            showAllBtn.textContent = 'Show All Counties';
+            showAllBtn.onclick = () => {
+                Object.keys(countyCheckboxes).forEach(county => {
+                    countyCheckboxes[county] = true;
+                    const checkbox = document.querySelector(`#county-${county}`);
+                    if (checkbox) checkbox.checked = true;
+                });
+                updateCountyLayer();
+            };
+
+            const hideAllBtn = document.createElement('button');
+            hideAllBtn.className = 'btn secondary';
+            hideAllBtn.textContent = 'Hide All Counties';
+            hideAllBtn.onclick = () => {
+                Object.keys(countyCheckboxes).forEach(county => {
+                    countyCheckboxes[county] = false;
+                    const checkbox = document.querySelector(`#county-${county}`);
+                    if (checkbox) checkbox.checked = false;
+                });
+                updateCountyLayer();
+            };
+
+            buttonContainer.appendChild(showAllBtn);
+            buttonContainer.appendChild(hideAllBtn);
+            countyControlsSection.appendChild(buttonContainer);
+            content.appendChild(countyControlsSection);
+
+            const countyList = document.createElement('div');
+            countyList.className = 'county-list';
+
+            // Load counties if not loaded yet
+            if (!allCountyGeoJSON) {
+                fetch('/api/counties/geojson')
+                    .then(response => response.json())
+                    .then(data => {
+                        allCountyGeoJSON = data.geojson;
+                        populateCountyList(countyList);
+                    })
+                    .catch(error => console.error('Error loading counties:', error));
+            } else {
+                populateCountyList(countyList);
+            }
+
+            content.appendChild(countyList);
+            filtersPopup.appendChild(content);
+
+            // Make draggable
+            let isDragging = false;
+            let dragOffsetX = 0;
+            let dragOffsetY = 0;
+
+            header.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                dragOffsetX = e.clientX - filtersPopup.offsetLeft;
+                dragOffsetY = e.clientY - filtersPopup.offsetTop;
+                filtersPopup.style.cursor = 'grabbing';
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (isDragging) {
+                    const newLeft = e.clientX - dragOffsetX;
+                    const newTop = e.clientY - dragOffsetY;
+
+                    const maxLeft = window.innerWidth - filtersPopup.offsetWidth;
+                    const maxTop = window.innerHeight - filtersPopup.offsetHeight;
+
+                    filtersPopup.style.left = Math.max(0, Math.min(newLeft, maxLeft)) + 'px';
+                    filtersPopup.style.top = Math.max(0, Math.min(newTop, maxTop)) + 'px';
+                }
+            });
+
+            document.addEventListener('mouseup', () => {
+                isDragging = false;
+                filtersPopup.style.cursor = 'default';
+            });
+
+            document.body.appendChild(filtersPopup);
+        };
+
+        /** Creates a movable popup for NDVI statistics */
+        const createStatsPopup = () => {
+            if (statsPopup) return;
+
+            statsPopup = document.createElement('div');
+            statsPopup.className = 'movable-popup';
+            statsPopup.style.left = '50px';
+            statsPopup.style.top = '50px';
+
+            const header = document.createElement('div');
+            header.className = 'popup-header';
+
+            const title = document.createElement('h3');
+            title.className = 'popup-title';
+            title.textContent = '📊 NDVI Statistics & Trends';
+
+            const controls = document.createElement('div');
+            controls.className = 'popup-controls';
+
+            const minimizeBtn = document.createElement('button');
+            minimizeBtn.className = 'popup-btn';
+            minimizeBtn.textContent = '−';
+            minimizeBtn.onclick = () => {
+                const content = statsPopup.querySelector('.popup-content');
+                content.style.display = content.style.display === 'none' ? 'block' : 'none';
+                minimizeBtn.textContent = content.style.display === 'none' ? '+' : '−';
+            };
+
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'popup-btn';
+            closeBtn.textContent = '×';
+            closeBtn.onclick = () => {
+                document.body.removeChild(statsPopup);
+                statsPopup = null;
+            };
+
+            controls.appendChild(minimizeBtn);
+            controls.appendChild(closeBtn);
+            header.appendChild(title);
+            header.appendChild(controls);
+            statsPopup.appendChild(header);
+
+            const content = document.createElement('div');
+            content.className = 'popup-content';
+
+            // County selection
+            const countyLabel = document.createElement('label');
+            countyLabel.textContent = 'Select County/AOI:';
+            const countySelect = document.createElement('select');
+            countySelect.id = 'stats-county-select';
+            countySelect.innerHTML = '<option value="">Loading counties...</option>';
+
+            // Time period selection
+            const periodLabel = document.createElement('label');
+            periodLabel.textContent = 'Time Period:';
+            const periodSelect = document.createElement('select');
+            periodSelect.id = 'stats-period-select';
+            periodSelect.innerHTML = `
+                <option value="years">Years</option>
+                <option value="months">Months</option>
+            `;
+
+            // Year/Month selection
+            const timeLabel = document.createElement('label');
+            timeLabel.textContent = 'Select Periods:';
+            const timeContainer = document.createElement('div');
+            timeContainer.id = 'time-selection-container';
+            timeContainer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;';
+
+            // Generate buttons
+            const generateYearsButtons = () => {
+                timeContainer.innerHTML = '';
+                const years = [2019, 2020, 2021, 2022, 2023, 2024, 2025];
+                years.forEach(year => {
+                    const btn = document.createElement('button');
+                    btn.className = 'time-btn';
+                    btn.textContent = year;
+                    btn.dataset.value = year;
+                    btn.onclick = () => {
+                        btn.classList.toggle('selected');
+                    };
+                    timeContainer.appendChild(btn);
+                });
+            };
+
+            const generateMonthsButtons = () => {
+                timeContainer.innerHTML = '';
+                const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                months.forEach((month, index) => {
+                    const btn = document.createElement('button');
+                    btn.className = 'time-btn';
+                    btn.textContent = month;
+                    btn.dataset.value = index + 1;
+                    btn.onclick = () => {
+                        btn.classList.toggle('selected');
+                    };
+                    timeContainer.appendChild(btn);
+                });
+            };
+
+            periodSelect.addEventListener('change', (e) => {
+                if (e.target.value === 'years') {
+                    generateYearsButtons();
+                } else {
+                    generateMonthsButtons();
+                }
+            });
+
+            // Initialize with years
+            generateYearsButtons();
+
+            // Generate button
+            const generateBtn = document.createElement('button');
+            generateBtn.className = 'btn';
+            generateBtn.textContent = '📈 Generate Statistics';
+            generateBtn.onclick = () => runStatistics();
+
+            // Results container
+            const resultsContainer = document.createElement('div');
+            resultsContainer.id = 'stats-results';
+            resultsContainer.style.cssText = 'margin-top: 16px; display: none;';
+
+            content.appendChild(countyLabel);
+            content.appendChild(countySelect);
+            content.appendChild(periodLabel);
+            content.appendChild(periodSelect);
+            content.appendChild(timeLabel);
+            content.appendChild(timeContainer);
+            content.appendChild(generateBtn);
+            content.appendChild(resultsContainer);
+            statsPopup.appendChild(content);
+
+            // Load counties
+            if (allCountyGeoJSON) {
+                populateStatsCounties();
+            } else {
+                fetch('/api/counties/geojson')
+                    .then(response => response.json())
+                    .then(data => {
+                        allCountyGeoJSON = data.geojson;
+                        populateStatsCounties();
+                    });
+            }
+
+            function populateStatsCounties() {
+                countySelect.innerHTML = '<option value="">Whole Area</option>';
+                allCountyGeoJSON.features.forEach(feature => {
+                    const option = document.createElement('option');
+                    option.value = feature.properties.COUNTY_NAM;
+                    option.textContent = feature.properties.COUNTY_NAM;
+                    countySelect.appendChild(option);
+                });
+            }
+
+            // Make draggable
+            let isDragging = false;
+            let dragOffsetX = 0;
+            let dragOffsetY = 0;
+
+            header.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                dragOffsetX = e.clientX - statsPopup.offsetLeft;
+                dragOffsetY = e.clientY - statsPopup.offsetTop;
+                statsPopup.style.cursor = 'grabbing';
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (isDragging) {
+                    const newLeft = e.clientX - dragOffsetX;
+                    const newTop = e.clientY - dragOffsetY;
+
+                    const maxLeft = window.innerWidth - statsPopup.offsetWidth;
+                    const maxTop = window.innerHeight - statsPopup.offsetHeight;
+
+                    statsPopup.style.left = Math.max(0, Math.min(newLeft, maxLeft)) + 'px';
+                    statsPopup.style.top = Math.max(0, Math.min(newTop, maxTop)) + 'px';
+                }
+            });
+
+            document.addEventListener('mouseup', () => {
+                isDragging = false;
+                statsPopup.style.cursor = 'default';
+            });
+
+            document.body.appendChild(statsPopup);
+        };
+
+        /** Runs NDVI statistics analysis */
+        const runStatistics = async () => {
+            const resultsContainer = document.getElementById('stats-results');
+            const countyName = document.getElementById('stats-county-select').value;
+            const periodType = document.getElementById('stats-period-select').value;
+            const selectedButtons = document.querySelectorAll('.time-btn.selected');
+
+            if (selectedButtons.length === 0) {
+                alert('Please select at least one time period.');
+                return;
+            }
+
+            resultsContainer.style.display = 'block';
+            resultsContainer.innerHTML = '<div style="text-align: center; padding: 20px;">🔄 Analyzing NDVI data...</div>';
+
+            try {
+                // Show loading
+                resultsContainer.innerHTML = '<div style="text-align: center; padding: 20px;">🔄 Calculating NDVI using Sentinel-2 data...</div>';
+
+                // Use real Sentinel-2 data instead of mock
+                const realData = await generateRealStatsData(selectedButtons, periodType, countyName);
+
+                // Display results
+                resultsContainer.innerHTML = `
+                    <h4 style="margin: 0 0 16px 0; color: #f1f5f9;">📊 NDVI Statistics Results</h4>
+                    <p style="color: #94a3b8; font-size: 0.9em; margin-bottom: 16px;">
+                        Analysis for ${realData.county} using Sentinel-2 best available imagery (${realData.validCount}/${realData.totalCount} periods with data)
+                    </p>
+
+                    <div class="stats-chart">
+                        📈 NDVI Trend Chart
+                        <div style="margin-top: 12px; padding: 12px; background: rgba(15, 23, 42, 0.6); border-radius: 6px;">
+                            <canvas id="ndviChart" width="300" height="150" style="max-width: 100%; height: auto;"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="stats-summary">
+                        <div class="stat-box">
+                            <div class="stat-value-large">${realData.mean.toFixed(3)}</div>
+                            <div class="stat-label-small">Mean NDVI</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value-large">${realData.trend}</div>
+                            <div class="stat-label-small">Trend</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value-large">${realData.max.toFixed(3)}</div>
+                            <div class="stat-label-small">Peak NDVI</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value-large">${realData.min.toFixed(3)}</div>
+                            <div class="stat-label-small">Min NDVI</div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 16px; text-align: center;">
+                        <button class="btn secondary" onclick="generatePDFReport(${JSON.stringify(realData).replace(/"/g, '"')})">
+                            📄 Generate PDF Report
+                        </button>
+                    </div>
+                `;
+
+                // Generate line chart
+                setTimeout(() => {
+                    generateLineChart(realData);
+                }, 100);
+
+            } catch (error) {
+                resultsContainer.innerHTML = `<div style="color: #ef4444; text-align: center; padding: 20px;">❌ Error: ${error.message}</div>`;
+            }
+        };
+
+        /** Generates real NDVI statistics using server-side Sentinel-2 processing */
+        const generateRealStatsData = async (selectedButtons, periodType, countyName) => {
+            const periods = Array.from(selectedButtons).map(btn => btn.dataset.value);
+
+            // Show progress popup
+            showProgressPopup('🔄 Calculating NDVI Statistics', 'Processing Sentinel-2 data...');
+
+            try {
+                const response = await fetch('/api/ndvi-statistics', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        countyName: countyName,
+                        periods: periods,
+                        periodType: periodType
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Server error');
+                }
+
+                const data = await response.json();
+
+                // Hide progress popup
+                hideProgressPopup();
+
+                return {
+                    periods: data.results.map(r => r.period),
+                    values: data.results.map(r => r.ndvi),
+                    dates: data.results.map(r => r.date),
+                    mean: data.mean,
+                    max: data.max,
+                    min: data.min,
+                    trend: data.trend,
+                    periodType: data.periodType,
+                    county: data.county,
+                    validCount: data.validPeriods,
+                    totalCount: data.totalPeriods,
+                    rawResults: data.results
+                };
+
+            } catch (error) {
+                hideProgressPopup();
+                showErrorPopup('❌ NDVI Calculation Failed', error.message);
+                throw error;
+            }
+        };
+
+        /** Shows a progress popup with message */
+        const showProgressPopup = (title, message) => {
+            const popup = document.createElement('div');
+            popup.className = 'movable-popup';
+            popup.style.left = '50%';
+            popup.style.top = '50%';
+            popup.style.transform = 'translate(-50%, -50%)';
+            popup.style.zIndex = '9999';
+
+            popup.innerHTML = `
+                <div class="popup-header">
+                    <h3 class="popup-title">${title}</h3>
+                </div>
+                <div class="popup-content">
+                    <div style="text-align: center; padding: 20px;">
+                        <div class="loader"></div>
+                        <p style="margin: 16px 0 0 0; color: #94a3b8;">${message}</p>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(popup);
+            return popup;
+        };
+
+        /** Hides the progress popup */
+        const hideProgressPopup = () => {
+            const popup = document.querySelector('.movable-popup[style*="z-index: 9999"]');
+            if (popup) {
+                document.body.removeChild(popup);
+            }
+        };
+
+        /** Shows an error popup */
+        const showErrorPopup = (title, message) => {
+            const popup = document.createElement('div');
+            popup.className = 'movable-popup';
+            popup.style.left = '50%';
+            popup.style.top = '50%';
+            popup.style.transform = 'translate(-50%, -50%)';
+            popup.style.zIndex = '9999';
+
+            popup.innerHTML = `
+                <div class="popup-header">
+                    <h3 class="popup-title">${title}</h3>
+                    <div class="popup-controls">
+                        <button class="popup-btn" onclick="this.closest('.movable-popup').remove()">×</button>
+                    </div>
+                </div>
+                <div class="popup-content">
+                    <div style="padding: 20px; text-align: center;">
+                        <p style="color: #ef4444; margin: 0;">${message}</p>
+                        <button class="btn secondary" style="margin-top: 16px;" onclick="this.closest('.movable-popup').remove()">OK</button>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(popup);
+        };
+
+        /** Generates a line chart for NDVI data */
+        const generateLineChart = (data) => {
+            const canvas = document.getElementById('ndviChart');
+            if (!canvas) return;
+
+            const ctx = canvas.getContext('2d');
+
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Chart dimensions
+            const width = canvas.width;
+            const height = canvas.height;
+            const padding = 40;
+            const chartWidth = width - 2 * padding;
+            const chartHeight = height - 2 * padding;
+
+            // Data
+            const periods = data.periods;
+            const values = data.values;
+
+            // Find min/max values
+            const minValue = Math.min(...values);
+            const maxValue = Math.max(...values);
+            const range = maxValue - minValue || 1;
+
+            // Draw axes
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 1;
+
+            // X-axis
+            ctx.beginPath();
+            ctx.moveTo(padding, height - padding);
+            ctx.lineTo(width - padding, height - padding);
+            ctx.stroke();
+
+            // Y-axis
+            ctx.beginPath();
+            ctx.moveTo(padding, padding);
+            ctx.lineTo(padding, height - padding);
+            ctx.stroke();
+
+            // Draw grid lines
+            ctx.strokeStyle = '#e2e8f0';
+            ctx.lineWidth = 0.5;
+
+            // Horizontal grid lines
+            for (let i = 0; i <= 5; i++) {
+                const y = padding + (chartHeight / 5) * i;
+                ctx.beginPath();
+                ctx.moveTo(padding, y);
+                ctx.lineTo(width - padding, y);
+                ctx.stroke();
+
+                // Y-axis labels
+                const value = maxValue - (range / 5) * i;
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = '10px monospace';
+                ctx.textAlign = 'right';
+                ctx.fillText(value.toFixed(2), padding - 5, y + 3);
+            }
+
+            // Vertical grid lines and X-axis labels
+            periods.forEach((period, i) => {
+                const x = padding + (chartWidth / (periods.length - 1)) * i;
+                ctx.beginPath();
+                ctx.moveTo(x, padding);
+                ctx.lineTo(x, height - padding);
+                ctx.stroke();
+
+                // X-axis labels
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = '10px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(period.toString(), x, height - padding + 15);
+            });
+
+            // Draw line
+            if (values.length > 1) {
+                ctx.strokeStyle = '#3b82f6';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+
+                values.forEach((value, i) => {
+                    const x = padding + (chartWidth / (values.length - 1)) * i;
+                    const y = padding + chartHeight - ((value - minValue) / range) * chartHeight;
+
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                });
+
+                ctx.stroke();
+
+                // Draw points
+                ctx.fillStyle = '#3b82f6';
+                values.forEach((value, i) => {
+                    const x = padding + (chartWidth / (values.length - 1)) * i;
+                    const y = padding + chartHeight - ((value - minValue) / range) * chartHeight;
+
+                    ctx.beginPath();
+                    ctx.arc(x, y, 3, 0, 2 * Math.PI);
+                    ctx.fill();
+                });
+            }
+
+            // Chart title
+            ctx.fillStyle = '#f1f5f9';
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('NDVI Trend Analysis', width / 2, 20);
+        };
+
+        /** Generates PDF report with real data */
+        const generatePDFReport = (data) => {
+            // Create a comprehensive PDF report
+            const reportContent = `
+NDVI ANALYSIS REPORT
+===================
+
+Location: ${data.county}
+Analysis Period: ${data.periodType === 'years' ? 'Years' : 'Months'}
+Data Source: Sentinel-2 Best Available Imagery
+
+STATISTICS SUMMARY
+==================
+
+Mean NDVI: ${data.mean.toFixed(3)}
+Trend: ${data.trend}
+Peak NDVI: ${data.max.toFixed(3)}
+Minimum NDVI: ${data.min.toFixed(3)}
+Valid Data Points: ${data.validCount}/${data.totalCount}
+
+TIME SERIES DATA
+================
+${data.periods.map((period, i) => `${period}: ${data.values[i]?.toFixed(3) || 'N/A'}`).join('\n')}
+
+ANALYSIS DETAILS
+===============
+• Data calculated using Sentinel-2 surface reflectance
+• Best available imagery selected (lowest cloud cover)
+• NDVI calculated as (NIR - Red) / (NIR + Red)
+• Analysis performed on ${new Date().toLocaleDateString()}
+
+This report was generated by the Geospatial Analysis Portal.
+            `;
+
+            // Create and download the report
+            const blob = new Blob([reportContent], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `NDVI_Report_${data.county}_${new Date().toISOString().split('T')[0]}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            alert('📄 Report downloaded successfully!\n\nFile: NDVI_Report_' + data.county + '_' + new Date().toISOString().split('T')[0] + '.txt');
+        };
+
+        /** Creates a movable popup for tiles */
+        const createTilesPopup = () => {
+            if (tilesPopup) return;
+
+            tilesPopup = document.createElement('div');
+            tilesPopup.className = 'movable-popup';
+            tilesPopup.style.left = '60px';
+            tilesPopup.style.bottom = '60px';
+
+            const header = document.createElement('div');
+            header.className = 'popup-header';
+
+            const title = document.createElement('h3');
+            title.className = 'popup-title';
+            title.textContent = '🛰️ Satellite Tiles';
+
+            const controls = document.createElement('div');
+            controls.className = 'popup-controls';
+
+            const minimizeBtn = document.createElement('button');
+            minimizeBtn.className = 'popup-btn';
+            minimizeBtn.textContent = '−';
+            minimizeBtn.onclick = () => {
+                const content = tilesPopup.querySelector('.popup-content');
+                content.style.display = content.style.display === 'none' ? 'block' : 'none';
+                minimizeBtn.textContent = content.style.display === 'none' ? '+' : '−';
+            };
+
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'popup-btn';
+            closeBtn.textContent = '×';
+            closeBtn.onclick = () => {
+                document.body.removeChild(tilesPopup);
+                tilesPopup = null;
+            };
+
+            controls.appendChild(minimizeBtn);
+            controls.appendChild(closeBtn);
+            header.appendChild(title);
+            header.appendChild(controls);
+            tilesPopup.appendChild(header);
+
+            const content = document.createElement('div');
+            content.className = 'popup-content';
+
+            // Satellite selector
+            const satelliteLabel = document.createElement('label');
+            satelliteLabel.textContent = 'Satellite:';
+            const satelliteSelect = document.createElement('select');
+            satelliteSelect.id = 'tiles-satellite-select';
+            satelliteSelect.innerHTML = `
+                <option value="sentinel">Sentinel-2 (High Resolution)</option>
+                <option value="landsat">Landsat 8 (Historical)</option>
+            `;
+
+            // Enable checkbox
+            const enableContainer = document.createElement('div');
+            enableContainer.style.cssText = 'display: flex; align-items: center; margin-top: 12px;';
+
+            const enableCheckbox = document.createElement('input');
+            enableCheckbox.type = 'checkbox';
+            enableCheckbox.id = 'tiles-enable-checkbox';
+            enableCheckbox.style.cssText = 'margin-right: 8px; accent-color: #3b82f6;';
+            enableCheckbox.checked = landsatEnabled;
+            enableCheckbox.addEventListener('change', () => {
+                landsatEnabled = enableCheckbox.checked;
+                updateLandsatLayer();
+            });
+
+            const enableLabel = document.createElement('label');
+            enableLabel.htmlFor = 'tiles-enable-checkbox';
+            enableLabel.textContent = 'Enable Satellite Tiles';
+            enableLabel.style.cssText = 'font-size: 0.85em; color: #e2e8f0; cursor: pointer;';
+
+            enableContainer.appendChild(enableCheckbox);
+            enableContainer.appendChild(enableLabel);
+
+            // Year slider
+            const yearContainer = document.createElement('div');
+            yearContainer.style.cssText = 'margin-top: 12px;';
+
+            const yearLabel = document.createElement('label');
+            yearLabel.textContent = `Year: ${landsatYear}`;
+            yearLabel.style.cssText = 'font-size: 0.8em; color: #94a3b8; display: block; margin-bottom: 4px;';
+
+            const yearSlider = document.createElement('input');
+            yearSlider.type = 'range';
+            yearSlider.min = '2013';
+            yearSlider.max = '2025';
+            yearSlider.value = landsatYear;
+            yearSlider.style.cssText = 'width: 100%; height: 6px; border-radius: 3px; background: rgba(71, 85, 105, 0.5); outline: none;';
+            yearSlider.addEventListener('input', (e) => {
+                landsatYear = parseInt(e.target.value);
+                yearLabel.textContent = `Year: ${landsatYear}`;
+                if (landsatEnabled) updateLandsatLayer();
+            });
+
+            yearContainer.appendChild(yearLabel);
+            yearContainer.appendChild(yearSlider);
+
+            content.appendChild(satelliteLabel);
+            content.appendChild(satelliteSelect);
+            content.appendChild(enableContainer);
+            content.appendChild(yearContainer);
+            tilesPopup.appendChild(content);
+
+            // Make draggable
+            let isDragging = false;
+            let dragOffsetX = 0;
+            let dragOffsetY = 0;
+
+            header.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                dragOffsetX = e.clientX - tilesPopup.offsetLeft;
+                dragOffsetY = e.clientY - tilesPopup.offsetTop;
+                tilesPopup.style.cursor = 'grabbing';
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (isDragging) {
+                    const newLeft = e.clientX - dragOffsetX;
+                    const newTop = e.clientY - dragOffsetY;
+
+                    const maxLeft = window.innerWidth - tilesPopup.offsetWidth;
+                    const maxTop = window.innerHeight - tilesPopup.offsetHeight;
+
+                    tilesPopup.style.left = Math.max(0, Math.min(newLeft, maxLeft)) + 'px';
+                    tilesPopup.style.top = Math.max(0, Math.min(newTop, maxTop)) + 'px';
+                }
+            });
+
+            document.addEventListener('mouseup', () => {
+                isDragging = false;
+                tilesPopup.style.cursor = 'default';
+            });
+
+            document.body.appendChild(tilesPopup);
+        };
+
+        /** Creates a movable popup for analysis */
+        const createAnalysisPopup = () => {
+            if (analysisPopup) return;
+
+            analysisPopup = document.createElement('div');
+            analysisPopup.className = 'movable-popup';
+            analysisPopup.style.right = '50px';
+            analysisPopup.style.top = '150px';
+
+            const header = document.createElement('div');
+            header.className = 'popup-header';
+
+            const title = document.createElement('h3');
+            title.className = 'popup-title';
+            title.textContent = '🔬 Sentinel Analysis';
+
+            const controls = document.createElement('div');
+            controls.className = 'popup-controls';
+
+            const minimizeBtn = document.createElement('button');
+            minimizeBtn.className = 'popup-btn';
+            minimizeBtn.textContent = '−';
+            minimizeBtn.onclick = () => {
+                const content = analysisPopup.querySelector('.popup-content');
+                content.style.display = content.style.display === 'none' ? 'block' : 'none';
+                minimizeBtn.textContent = content.style.display === 'none' ? '+' : '−';
+            };
+
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'popup-btn';
+            closeBtn.textContent = '×';
+            closeBtn.onclick = () => {
+                document.body.removeChild(analysisPopup);
+                analysisPopup = null;
+            };
+
+            controls.appendChild(minimizeBtn);
+            controls.appendChild(closeBtn);
+            header.appendChild(title);
+            header.appendChild(controls);
+            analysisPopup.appendChild(header);
+
+            const content = document.createElement('div');
+            content.className = 'popup-content';
+
+            // Satellite selector
+            const satelliteLabel = document.createElement('label');
+            satelliteLabel.textContent = 'Satellite:';
+            const satelliteSelect = document.createElement('select');
+            satelliteSelect.id = 'analysis-satellite-select';
+            satelliteSelect.innerHTML = `
+                <option value="sentinel">Sentinel-2 (High Resolution)</option>
+                <option value="landsat">Landsat 8 (Historical)</option>
+            `;
+
+            // County selector
+            const countyLabel = document.createElement('label');
+            countyLabel.textContent = 'County/AOI:';
+            const countySelect = document.createElement('select');
+            countySelect.id = 'analysis-county-select';
+            countySelect.innerHTML = '<option value="" disabled selected>Loading counties...</option>';
+
+            // Year selector
+            const yearLabel = document.createElement('label');
+            yearLabel.textContent = 'Year:';
+            const yearSelect = document.createElement('select');
+            yearSelect.id = 'analysis-year-input';
+            const currentYear = new Date().getFullYear();
+            for (let i = 0; i < 10; i++) {
+                const year = currentYear - i;
+                const option = document.createElement('option');
+                option.value = year;
+                option.textContent = year;
+                if (i === 0) option.selected = true;
+                yearSelect.appendChild(option);
+            }
+
+            // Cloud cover input
+            const cloudLabel = document.createElement('label');
+            cloudLabel.textContent = 'Max Cloud Cover (%):';
+            const cloudInput = document.createElement('input');
+            cloudInput.type = 'number';
+            cloudInput.id = 'analysis-cloud-cover-input';
+            cloudInput.min = '1';
+            cloudInput.max = '100';
+            cloudInput.value = '10';
+
+            // Enhancement selector
+            const enhancementLabel = document.createElement('label');
+            enhancementLabel.textContent = 'Analysis/Enhancement:';
+            const enhancementSelect = document.createElement('select');
+            enhancementSelect.id = 'analysis-enhancement-select';
+            enhancementSelect.innerHTML = `
+                <option value="true_color">True Color (B4, B3, B2)</option>
+                <option value="false_color">False Color (B8, B4, B3) - Vegetation</option>
+                <option value="ndvi">NDVI (Normalized Difference Vegetation Index)</option>
+                <option value="moisture_index">NDMI (Normalized Difference Moisture Index)</option>
+                <option value="agriculture">Agriculture (B11, B8, B2)</option>
+                <option value="urban">Urban (B12, B11, B4)</option>
+            `;
+
+            // Submit button
+            const submitBtn = document.createElement('button');
+            submitBtn.className = 'btn';
+            submitBtn.textContent = 'Generate Sentinel Map';
+            submitBtn.onclick = () => runAnalysis();
+
+            // Loader and error display
+            const loader = document.createElement('div');
+            loader.className = 'loader';
+            loader.id = 'analysis-loader';
+
+            const errorDisplay = document.createElement('div');
+            errorDisplay.className = 'error-message';
+            errorDisplay.id = 'analysis-error-display';
+
+            content.appendChild(satelliteLabel);
+            content.appendChild(satelliteSelect);
+            content.appendChild(countyLabel);
+            content.appendChild(countySelect);
+            content.appendChild(yearLabel);
+            content.appendChild(yearSelect);
+            content.appendChild(cloudLabel);
+            content.appendChild(cloudInput);
+            content.appendChild(enhancementLabel);
+            content.appendChild(enhancementSelect);
+            content.appendChild(submitBtn);
+            content.appendChild(loader);
+            content.appendChild(errorDisplay);
+            analysisPopup.appendChild(content);
+
+            // Load counties
+            fetch('/api/counties/geojson')
+                .then(response => response.json())
+                .then(data => {
+                    countySelect.innerHTML = '<option value="" selected>Whole Area (Center Point)</option>';
+                    data.countyList.forEach(county => {
+                        const option = document.createElement('option');
+                        option.value = county;
+                        option.textContent = county;
+                        countySelect.appendChild(option);
+                    });
+                })
+                .catch(error => console.error('Error loading counties:', error));
+
+            // Make draggable
+            let isDragging = false;
+            let dragOffsetX = 0;
+            let dragOffsetY = 0;
+
+            header.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                dragOffsetX = e.clientX - analysisPopup.offsetLeft;
+                dragOffsetY = e.clientY - analysisPopup.offsetTop;
+                analysisPopup.style.cursor = 'grabbing';
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (isDragging) {
+                    const newLeft = e.clientX - dragOffsetX;
+                    const newTop = e.clientY - dragOffsetY;
+
+                    const maxLeft = window.innerWidth - analysisPopup.offsetWidth;
+                    const maxTop = window.innerHeight - analysisPopup.offsetHeight;
+
+                    analysisPopup.style.left = Math.max(0, Math.min(newLeft, maxLeft)) + 'px';
+                    analysisPopup.style.top = Math.max(0, Math.min(newTop, maxTop)) + 'px';
+                }
+            });
+
+            document.addEventListener('mouseup', () => {
+                isDragging = false;
+                analysisPopup.style.cursor = 'default';
+            });
+
+            document.body.appendChild(analysisPopup);
+        };
+
+        /** Populates the county list in filters popup */
+        const populateCountyList = (container) => {
+            if (!allCountyGeoJSON) return;
+
+            container.innerHTML = '';
+            allCountyGeoJSON.features.forEach(feature => {
+                const countyName = feature.properties.COUNTY_NAM;
+                const countyColor = feature.properties.color || '#cccccc';
+                const item = document.createElement('div');
+                item.className = 'county-item';
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = `county-${countyName}`;
+                checkbox.checked = countyCheckboxes[countyName] !== false;
+                checkbox.addEventListener('change', () => {
+                    countyCheckboxes[countyName] = checkbox.checked;
+                    updateCountyLayer();
+                });
+
+                const colorIndicator = document.createElement('div');
+                colorIndicator.style.cssText = `
+                    width: 12px;
+                    height: 12px;
+                    background: ${countyColor};
+                    border-radius: 2px;
+                    margin-right: 6px;
+                    border: 1px solid rgba(255,255,255,0.3);
+                `;
+
+                const label = document.createElement('label');
+                label.htmlFor = `county-${countyName}`;
+                label.textContent = countyName;
+                label.style.cssText = 'cursor: pointer; flex: 1; font-size: 0.85em;';
+
+                item.appendChild(checkbox);
+                item.appendChild(colorIndicator);
+                item.appendChild(label);
+                container.appendChild(item);
+
+                countyCheckboxes[countyName] = checkbox.checked;
+            });
+        };
+
+        /** Updates the county layer based on checkbox states */
+        const updateCountyLayer = () => {
+            if (!allCountyGeoJSON) return;
+
+            if (countyLayer) map.removeLayer(countyLayer);
+
+            const filteredFeatures = allCountyGeoJSON.features.filter(feature => {
+                const countyName = feature.properties.COUNTY_NAM;
+                return countyCheckboxes[countyName];
+            });
+
+            const filteredGeoJSON = {
+                ...allCountyGeoJSON,
+                features: filteredFeatures
+            };
+
+            countyLayer = L.geoJson(filteredGeoJSON, {
+                style: styleCounty,
+                onEachFeature: onEachFeature
+            }).addTo(map);
+
+            // Re-order layers: basemap -> landsat -> sentinel -> counties
+            reorderLayers();
+        };
+
+        /** Updates the Landsat layer based on settings */
+        const updateLandsatLayer = () => {
+            if (landsatLayer) {
+                map.removeLayer(landsatLayer);
+                landsatLayer = null;
+            }
+
+            if (landsatEnabled) {
+                const landsatTiles = {
+                    2013: "https://earthengine.googleapis.com/v1/projects/ee-celestakim019/maps/fe143f051f25c4914f65d2eb16d3aad2-3ed6aef84efb9f62d379adb24bfdc096/tiles/{z}/{x}/{y}",
+                    2014: "https://earthengine.googleapis.com/v1/projects/ee-celestakim019/maps/6d664011a28b449594a4a6cba187d90c-5d3361a97b1cc5dca26aa1bab6a01077/tiles/{z}/{x}/{y}",
+                    2015: "https://earthengine.googleapis.com/v1/projects/ee-celestakim019/maps/fd51b25574c583e44431667cb577d537-978e96b39c3bd12dfd111e1bd3eda594/tiles/{z}/{x}/{y}",
+                    2016: "https://earthengine.googleapis.com/v1/projects/ee-celestakim019/maps/756e11c97bd64fb1268f91a48a4e2515-5d4138f0fbbb5b137f15131551a93eae/tiles/{z}/{x}/{y}",
+                    2017: "https://earthengine.googleapis.com/v1/projects/ee-celestakim019/maps/692f44140955db346d1dcce7fed1aef1-3895f47735e9fc5aebe26d1df8384e10/tiles/{z}/{x}/{y}",
+                    2018: "https://earthengine.googleapis.com/v1/projects/ee-celestakim019/maps/5156692c1e5f6068a75481971a6cdaa5-17061d6e99529393edea556937a1417e/tiles/{z}/{x}/{y}",
+                    2019: "https://earthengine.googleapis.com/v1/projects/ee-celestakim019/maps/a9652b4c0d325d7827248f35d382346f-f71f33dbfd7e1ed013f581bced9a6304/tiles/{z}/{x}/{y}",
+                    2020: "https://earthengine.googleapis.com/v1/projects/ee-celestakim019/maps/c081ec10441f7997b2d05d34034368f2-607b98700d5ecb26e6359e52c3188f21/tiles/{z}/{x}/{y}",
+                    2021: "https://earthengine.googleapis.com/v1/projects/ee-celestakim019/maps/63e602b14e3ac9d5504be0c54bbf29bf-2c986ea2d5b6e8f363171128aa103c4e/tiles/{z}/{x}/{y}",
+                    2022: "https://earthengine.googleapis.com/v1/projects/ee-celestakim019/maps/acf564b9c6d136641ad3580ebecd1214-a48576eb4ce27d8a146baa5f9a0e4f2c/tiles/{z}/{x}/{y}",
+                    2023: "https://earthengine.googleapis.com/v1/projects/ee-celestakim019/maps/dd501610068603c274aade38e6ff42b6-e5cc0ff6c9f7e80f9fdfeefa12f789c9/tiles/{z}/{x}/{y}",
+                    2024: "https://earthengine.googleapis.com/v1/projects/ee-celestakim019/maps/926942f8073995d59d0426314d999274-Oc913c433e6f7d3e7f82e3d0a0faaf0e/tiles/{z}/{x}/{y}",
+                    2025: "https://earthengine.googleapis.com/v1/projects/ee-celestakim019/maps/9ab3adafaca8cce131d90fcad1e43dea-e19d4b02082ede7b35aff77b11e7bf9e/tiles/{z}/{x}/{y}"
+                };
+
+                landsatLayer = L.tileLayer(landsatTiles[landsatYear], {
+                    maxZoom: 13,
+                    attribution: `Landsat 8 ${landsatYear} © USGS/NASA via GEE`
+                }).addTo(map);
+            }
+
+            reorderLayers();
+        };
+
+        /** Reorders map layers for proper display */
+        const reorderLayers = () => {
+            // Layer order: basemap -> tiles -> analysis -> counties
+            if (landsatLayer) landsatLayer.bringToFront();
+            if (eeTileLayer) eeTileLayer.bringToFront();
+            if (countyLayer) countyLayer.bringToFront();
+        };
+
+        /** Runs the Sentinel analysis */
+        const runAnalysis = async () => {
+            const loader = document.getElementById('analysis-loader');
+            const errorDisplay = document.getElementById('analysis-error-display');
+            const submitBtn = analysisPopup.querySelector('.btn');
+
+            errorDisplay.textContent = '';
+            clearMapLayer();
+            loader.style.display = 'block';
+            submitBtn.disabled = true;
+
+            const countyName = document.getElementById('analysis-county-select').value;
+            const year = document.getElementById('analysis-year-input').value;
+            const enhancement = document.getElementById('analysis-enhancement-select').value;
+            const cloudCover = document.getElementById('analysis-cloud-cover-input').value;
+
+            const requestBody = {
+                year: parseInt(year),
+                bands: ["B4", "B3", "B2"],
+                enhancement: enhancement,
+                countyName: countyName || null,
+                cloudCover: parseFloat(cloudCover)
+            };
+
+            try {
+                const response = await fetch('/api/sentinel', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Unknown server error.');
+                }
+
+                // SUCCESS: Add the Earth Engine Tile Layer to the map
+                const mapId = data.mapId;
+                const tileUrl = mapId.urlFormat;
+
+                eeTileLayer = L.tileLayer(tileUrl, {
+                    tileSize: 256,
+                    attribution: 'Sentinel-2 via Google Earth Engine'
+                }).addTo(map);
+
+                // Re-order layers to ensure the county layer is on top
+                if (countyLayer) countyLayer.bringToFront();
+
+                // Update the legend
+                if (data.legendInfo && data.legendInfo.title) {
+                    showLegendPopup(data.legendInfo);
+                }
+
+            } catch (error) {
+                console.error('Map Generation Failed:', error);
+                errorDisplay.textContent = `Analysis Failed: ${error.message}`;
+            } finally {
+                loader.style.display = 'none';
+                submitBtn.disabled = false;
+            }
+        };
+
+        // ===================================================================
+        // 🗺️ INITIAL DATA & MAP POPULATION
+        // ===================================================================
+
+        /** Populates the Year dropdown with the last 10 years. */
+        const populateYears = () => {
+            const currentYear = new Date().getFullYear();
+            const yearSelect = document.getElementById('year-input');
+            if (yearSelect) {
+                for (let i = 0; i < 10; i++) {
+                    const year = currentYear - i;
+                    const option = document.createElement('option');
+                    option.value = year;
+                    option.textContent = year;
+                    if (i === 0) option.selected = true;
+                    yearSelect.appendChild(option);
+                }
+            }
+        };
+
+        /** Fetches GeoJSON, populates the dropdown, and draws the counties. */
+        const fetchAndDrawCounties = async () => {
+            try {
+                const response = await fetch('/api/counties/geojson');
+                const data = await response.json();
+
+                allCountyGeoJSON = data.geojson; // Store GeoJSON data
+
+                // 1. Draw Counties on Map
+                if (countyLayer) map.removeLayer(countyLayer);
+                countyLayer = L.geoJson(allCountyGeoJSON, {
+                    style: styleCounty,
+                    onEachFeature: onEachFeature
+                }).addTo(map);
+
+                // Zoom to the extent of all counties
+                map.fitBounds(countyLayer.getBounds());
+
+                console.log('Counties GeoJSON loaded and drawn successfully.');
+
+            } catch (error) {
+                console.error('Error fetching GeoJSON:', error);
+                displayError('Could not load county boundaries. Server might be offline.');
+            }
+        };
+
+        // ===================================================================
+        // 👂 EVENT HANDLERS
+        // ===================================================================
+
+        // Basemap switching
+        document.querySelectorAll('.basemap-card').forEach(card => {
+            card.addEventListener('click', function() {
+                const basemapType = this.getAttribute('data-basemap');
+                switchBasemap(basemapType);
+
+                document.querySelectorAll('.basemap-card').forEach(c => c.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+
+        function switchBasemap(type) {
+            if (currentBaseLayer) {
+                map.removeLayer(currentBaseLayer);
+            }
+
+            currentBasemap = type;
+            currentBaseLayer = L.tileLayer(baseLayers[type].url, {
+                attribution: baseLayers[type].attribution,
+                maxZoom: 19
+            }).addTo(map);
+
+            // Update UI
+            const currentBasemapEl = document.getElementById('current-basemap');
+            if (currentBasemapEl) {
+                currentBasemapEl.textContent = baseLayers[type].name;
+            }
+
+            // Ensure overlays stay on top
+            if (countyLayer) countyLayer.bringToFront();
+            if (eeTileLayer) eeTileLayer.bringToFront();
+
+            updateLastUpdated();
+        }
+
+        // Update coordinates on mouse move
+        map.on('mousemove', function(e) {
+            updateCoordinates(e.latlng.lat, e.latlng.lng);
+        });
+
+        function updateCoordinates(lat, lng) {
+            const coordinatesEl = document.getElementById('coordinates');
+            if (coordinatesEl) {
+                coordinatesEl.textContent = `📍 Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`;
+            }
+        }
+
+        // Update map stats
+        map.on('zoomend', function() {
+            const zoom = map.getZoom();
+            const zoomEl = document.getElementById('zoom-level');
+            if (zoomEl) zoomEl.textContent = zoom;
+
+            // Calculate approximate scale
+            const scale = Math.round(591657527.591555 / Math.pow(2, zoom));
+            const scaleEl = document.getElementById('scale');
+            if (scaleEl) scaleEl.textContent = `1:${scale.toLocaleString()}`;
+        });
+
+        function updateLastUpdated() {
+            const now = new Date();
+            const lastUpdatedEl = document.getElementById('last-updated');
+            if (lastUpdatedEl) {
+                lastUpdatedEl.textContent = `Updated: ${now.toLocaleTimeString()}`;
+            }
+        }
+
+        // Map actions
+        document.getElementById('fullscreen-btn').addEventListener('click', function() {
+            if (map.getContainer().requestFullscreen) {
+                map.getContainer().requestFullscreen();
+            }
+        });
+
+        document.getElementById('center-btn').addEventListener('click', function() {
+            map.setView([-0.05, 37.65], 7);
+        });
+
+        document.getElementById('counties-btn').addEventListener('click', function() {
+            createCountiesPopup();
+        });
+
+        document.getElementById('analysis-btn').addEventListener('click', function() {
+            createAnalysisPopup();
+        });
+
+        document.getElementById('tiles-btn').addEventListener('click', function() {
+            createTilesPopup();
+        });
+
+        document.getElementById('stats-btn').addEventListener('click', function() {
+            createStatsPopup();
+        });
+
+        // County interaction functions
+        function zoomToCounty(countyName) {
+            if (!allCountyGeoJSON) return;
+
+            const feature = allCountyGeoJSON.features.find(f => f.properties.COUNTY_NAM === countyName);
+            if (feature && feature.properties.bbox) {
+                const [minLon, minLat, maxLon, maxLat] = feature.properties.bbox;
+                const bounds = L.latLngBounds([[minLat, minLon], [maxLat, maxLon]]);
+                map.fitBounds(bounds, { padding: [20, 20] });
+            }
+        }
+
+        function analyzeCounty(countyName) {
+            // Open analysis popup and pre-select the county
+            createAnalysisPopup();
+            setTimeout(() => {
+                const countySelect = document.querySelector('#analysis-county-select');
+                if (countySelect) {
+                    countySelect.value = countyName;
+                }
+            }, 100);
+        }
+
+        function downloadCounty(countyName) {
+            // Trigger download for specific county
+            fetch(`/api/download/geojson?countyName=${encodeURIComponent(countyName)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.downloadUrl) {
+                        const tempLink = document.createElement('a');
+                        tempLink.href = data.downloadUrl;
+                        tempLink.setAttribute('download', '');
+                        document.body.appendChild(tempLink);
+                        tempLink.click();
+                        document.body.removeChild(tempLink);
+                    }
+                })
+                .catch(error => console.error('Download failed:', error));
+        }
+
+        // Initialize
+        populateYears();
+        fetchAndDrawCounties();
+        updateLastUpdated();
+    </script>
+</body>
+</html>
+        // ===================================================================
+        // 🗺️ MAP INITIALIZATION & BASEMAP LAYERS
+        // ===================================================================
+
+        // Define basemap layers
+        const baseLayers = {
+            OSM: {
+                url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                attribution: '© OpenStreetMap contributors',
+                name: 'OpenStreetMap'
+            },
+            GoogleSatellite: {
+                url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                attribution: '© Esri, Maxar, Earthstar Geographics',
+                name: 'Google Satellite'
+            },
+            EsriTopo: {
+                url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+                attribution: '© Esri, HERE, Garmin, SafeGraph',
+                name: 'Esri Topographic'
+            },
+            EsriImagery: {
+                url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                attribution: '© Esri, Maxar, Earthstar Geographics',
+                name: 'Esri Imagery'
+            },
+            CartoDark: {
+                url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+                attribution: '© CARTO',
+                name: 'CartoDB Dark'
+            }
+        };
+
+        // Initialize map with default basemap
+        const map = L.map('map', {
+            center: [-0.05, 37.65], // Default center (e.g., central Kenya)
+            zoom: 7,
+            minZoom: 2,
+            maxZoom: 18,
+            layers: [L.tileLayer(baseLayers.OSM.url, { attribution: baseLayers.OSM.attribution })] // Start with OSM
+        });
+
+        let currentBaseLayer = L.tileLayer(baseLayers.OSM.url, { attribution: baseLayers.OSM.attribution });
+        let currentBasemap = 'OSM';
+
+        let eeTileLayer = null; // Holds the Sentinel layer
+        let countyLayer = null; // Holds the GeoJSON county layer
+        let allCountyGeoJSON = null; // Stores the GeoJSON data once loaded
+        let countyCheckboxes = {}; // Stores checkbox states for counties
+        let legendPopup = null; // Holds the draggable legend popup
+
+        // ===================================================================
+        // 🔄 UTILITY FUNCTIONS
+        // ===================================================================
+
+        const displayError = (message) => {
+            document.getElementById('error-display').textContent = message;
+        }
+
+        const clearMapLayer = () => {
+            if (eeTileLayer) {
+                map.removeLayer(eeTileLayer);
+                eeTileLayer = null;
+            }
+        }
+
+        /** Styles the county features for display */
+        const styleCounty = (feature) => {
+            return {
+                fillColor: feature.properties.color || '#cccccc',
+                weight: 2,
+                opacity: 0.8,
+                color: 'black',
+                dashArray: '3',
+                fillOpacity: 0.5
+            };
+        }
+
+        /** Handles interaction with the GeoJSON layer (popup) */
+        const onEachFeature = (feature, layer) => {
+            if (feature.properties && feature.properties.COUNTY_NAM) {
+                layer.bindPopup(`<b>County:</b> ${feature.properties.COUNTY_NAM}`);
+            }
+        }
+
+        /** Creates checkboxes for each county */
+        const createCountyCheckboxes = (counties) => {
+            const container = document.getElementById('county-checkboxes');
+            container.innerHTML = '';
+            counties.forEach(county => {
+                const item = document.createElement('div');
+                item.className = 'county-item';
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = `county-${county}`;
+                checkbox.checked = true;
+                checkbox.addEventListener('change', () => {
+                    countyCheckboxes[county] = checkbox.checked;
+                    updateCountyLayer();
+                });
+
+                const label = document.createElement('label');
+                label.htmlFor = `county-${county}`;
+                label.textContent = county;
+
+                item.appendChild(checkbox);
+                item.appendChild(label);
+                container.appendChild(item);
+
+                countyCheckboxes[county] = true;
+            });
+        }
+
+        /** Updates the county layer based on checkbox states */
+        const updateCountyLayer = () => {
+            if (!allCountyGeoJSON) return;
+
+            if (countyLayer) map.removeLayer(countyLayer);
+
+            const filteredFeatures = allCountyGeoJSON.features.filter(feature => {
+                const countyName = feature.properties.COUNTY_NAM;
+                return countyCheckboxes[countyName];
+            });
+
+            const filteredGeoJSON = {
+                ...allCountyGeoJSON,
+                features: filteredFeatures
+            };
+
+            countyLayer = L.geoJson(filteredGeoJSON, {
+                style: styleCounty,
+                onEachFeature: onEachFeature
+            }).addTo(map);
+
+            // Re-order layers to ensure the county layer is on top
+            if (eeTileLayer) eeTileLayer.bringToFront();
+            if (countyLayer) countyLayer.bringToFront();
+        }
+
+        /** Creates and shows a modern draggable legend popup */
+        const showLegendPopup = (legendInfo) => {
+            // Remove existing popup
+            if (legendPopup) {
+                document.body.removeChild(legendPopup);
+            }
+
+            // Create new popup
+            legendPopup = document.createElement('div');
+            legendPopup.className = 'legend-popup';
+            legendPopup.style.right = '20px';
+            legendPopup.style.bottom = '20px';
+
+            // Header with drag handle
+            const header = document.createElement('div');
+            header.style.display = 'flex';
+            header.style.justifyContent = 'space-between';
+            header.style.alignItems = 'center';
+            header.style.marginBottom = '12px';
+            header.style.cursor = 'move';
+            header.style.padding = '4px';
+
+            const title = document.createElement('h4');
+            title.textContent = legendInfo.title;
+            title.style.margin = '0';
+
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'close-btn';
+            closeBtn.textContent = '×';
+            closeBtn.onclick = () => {
+                if (legendPopup) {
+                    legendPopup.style.animation = 'popupMorph 0.3s ease-in reverse';
+                    setTimeout(() => {
+                        if (legendPopup) {
+                            document.body.removeChild(legendPopup);
+                            legendPopup = null;
+                        }
+                    }, 300);
+                }
+            };
+
+            header.appendChild(title);
+            header.appendChild(closeBtn);
+            legendPopup.appendChild(header);
+
+            // Classes in a clean list layout
+            if (legendInfo.classes && legendInfo.classes.length > 0) {
+                legendInfo.classes.forEach(cls => {
+                    const item = document.createElement('div');
+                    item.className = 'legend-item';
+
+                    const colorBox = document.createElement('div');
+                    colorBox.className = 'color-box';
+                    colorBox.style.backgroundColor = cls.color;
+
+                    const label = document.createElement('span');
+                    label.textContent = cls.label;
+                    label.style.fontSize = '0.85em';
+                    label.style.fontWeight = '500';
+                    label.style.marginLeft = '10px';
+
+                    item.appendChild(colorBox);
+                    item.appendChild(label);
+                    legendPopup.appendChild(item);
+                });
+            } else {
+                const desc = document.createElement('p');
+                desc.className = 'legend-desc';
+                desc.textContent = legendInfo.description || 'No additional information available.';
+                legendPopup.appendChild(desc);
+            }
+
+            // Make draggable with smooth animations
+            let isDragging = false;
+            let dragOffsetX = 0;
+            let dragOffsetY = 0;
+
+            header.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                dragOffsetX = e.clientX - legendPopup.offsetLeft;
+                dragOffsetY = e.clientY - legendPopup.offsetTop;
+                legendPopup.classList.add('dragging');
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (isDragging) {
+                    const newLeft = e.clientX - dragOffsetX;
+                    const newTop = e.clientY - dragOffsetY;
+
+                    // Keep popup within viewport bounds
+                    const maxLeft = window.innerWidth - legendPopup.offsetWidth;
+                    const maxTop = window.innerHeight - legendPopup.offsetHeight;
+
+                    legendPopup.style.left = Math.max(0, Math.min(newLeft, maxLeft)) + 'px';
+                    legendPopup.style.top = Math.max(0, Math.min(newTop, maxTop)) + 'px';
+                    legendPopup.style.right = 'auto';
+                    legendPopup.style.bottom = 'auto';
+                }
+            });
+
+            document.addEventListener('mouseup', () => {
+                isDragging = false;
+                legendPopup.classList.remove('dragging');
+            });
+
+            document.body.appendChild(legendPopup);
+        }
+
+        // ===================================================================
+        // 🗺️ INITIAL DATA & MAP POPULATION
+        // ===================================================================
+
+        /** Populates the Year dropdown with the last 10 years. */
+        const populateYears = () => {
+            const currentYear = new Date().getFullYear();
+            const yearSelect = document.getElementById('year-input');
+            for (let i = 0; i < 10; i++) {
+                const year = currentYear - i;
+                const option = document.createElement('option');
+                option.value = year;
+                option.textContent = year;
+                if (i === 0) option.selected = true;
+                yearSelect.appendChild(option);
+            }
+        };
+
+        /** Fetches GeoJSON, populates the dropdown, and draws the counties. */
+        const fetchAndDrawCounties = async () => {
+            try {
+                document.getElementById('loader').style.display = 'block';
+                document.getElementById('county-select').innerHTML = '<option value="" disabled selected>Loading boundaries...</option>';
+
+                const response = await fetch('/api/counties/geojson');
+                const data = await response.json();
+
+                allCountyGeoJSON = data.geojson; // Store GeoJSON data
+
+                // 1. Draw Counties on Map
+                if (countyLayer) map.removeLayer(countyLayer);
+                countyLayer = L.geoJson(allCountyGeoJSON, {
+                    style: styleCounty,
+                    onEachFeature: onEachFeature
+                }).addTo(map);
+
+                // Zoom to the extent of all counties
+                map.fitBounds(countyLayer.getBounds());
+
+                // 2. Populate Dropdown
+                document.getElementById('county-select').innerHTML = '<option value="" selected>Whole Area (Center Point)</option>';
+                data.countyList.forEach(county => {
+                    const option = document.createElement('option');
+                    option.value = county;
+                    option.textContent = county;
+                    document.getElementById('county-select').appendChild(option);
+                });
+
+                // 3. Create Checkboxes
+                createCountyCheckboxes(data.countyList);
+
+                console.log('Counties GeoJSON loaded and drawn successfully.');
+
+            } catch (error) {
+                console.error('Error fetching GeoJSON:', error);
+                document.getElementById('county-select').innerHTML = '<option value="" disabled selected>Failed to load counties</option>';
+                displayError('Could not load county boundaries. Server might be offline.');
+            } finally {
+                document.getElementById('loader').style.display = 'none';
+            }
+        };
+
+        // ===================================================================
+        // 👂 EVENT HANDLERS
+        // ===================================================================
+
+        // Compact basemap selector
+        const basemapSelector = document.getElementById('basemapSelector');
+        const basemapToggle = document.getElementById('basemapToggle');
+
+        basemapToggle.addEventListener('click', function() {
+            basemapSelector.classList.toggle('expanded');
+        });
+
+        document.querySelectorAll('.basemap-option').forEach(option => {
+            option.addEventListener('click', function() {
+                const basemapType = this.getAttribute('data-map');
+                switchBasemap(basemapType);
+
+                document.querySelectorAll('.basemap-option').forEach(o => o.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+
+        // Make basemap selector draggable
+        let isDraggingSelector = false;
+        let selectorOffsetX = 0;
+        let selectorOffsetY = 0;
+
+        basemapSelector.addEventListener('mousedown', function(e) {
+            if (e.target === basemapToggle || e.target.closest('.basemap-option')) return;
+            isDraggingSelector = true;
+            selectorOffsetX = e.clientX - basemapSelector.offsetLeft;
+            selectorOffsetY = e.clientY - basemapSelector.offsetTop;
+            basemapSelector.classList.add('dragging');
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (isDraggingSelector) {
+                const newLeft = e.clientX - selectorOffsetX;
+                const newTop = e.clientY - selectorOffsetY;
+
+                const maxLeft = window.innerWidth - basemapSelector.offsetWidth;
+                const maxTop = window.innerHeight - basemapSelector.offsetHeight;
+
+                basemapSelector.style.left = Math.max(0, Math.min(newLeft, maxLeft)) + 'px';
+                basemapSelector.style.top = Math.max(0, Math.min(newTop, maxTop)) + 'px';
+            }
+        });
+
+        document.addEventListener('mouseup', function() {
+            isDraggingSelector = false;
+            basemapSelector.classList.remove('dragging');
+        });
+
+        // Update coordinates on mouse move
+        map.on('mousemove', function(e) {
+            updateCoordinates(e.latlng.lat, e.latlng.lng);
+        });
+
+        function updateCoordinates(lat, lng) {
+            document.getElementById('coordinatesDisplay').textContent =
+                `Lat: ${lat.toFixed(6)} Lng: ${lng.toFixed(6)}`;
+        }
+
+        // Panel controls
+        let isPanelMinimized = false;
+        let isPanelExpanded = false;
+
+        document.getElementById('minimize-btn').addEventListener('click', () => {
+            isPanelMinimized = !isPanelMinimized;
+            document.getElementById('controls-panel').classList.toggle('minimized');
+            document.getElementById('minimize-btn').textContent = isPanelMinimized ? '+' : '−';
+            document.getElementById('minimize-btn').title = isPanelMinimized ? 'Maximize' : 'Minimize';
+        });
+
+        document.getElementById('expand-btn').addEventListener('click', () => {
+            isPanelExpanded = !isPanelExpanded;
+            const panel = document.getElementById('controls-panel');
+            if (isPanelExpanded) {
+                panel.style.width = '500px';
+                document.getElementById('expand-btn').textContent = '⤡';
+                document.getElementById('expand-btn').title = 'Shrink';
+            } else {
+                panel.style.width = '320px';
+                document.getElementById('expand-btn').textContent = '⤢';
+                document.getElementById('expand-btn').title = 'Expand';
+            }
+        });
+
+        // Make panel draggable
+        let isDraggingPanel = false;
+        let panelOffsetX = 0;
+        let panelOffsetY = 0;
+
+        document.querySelector('.panel-header').addEventListener('mousedown', (e) => {
+            isDraggingPanel = true;
+            const panel = document.getElementById('controls-panel');
+            panelOffsetX = e.clientX - panel.offsetLeft;
+            panelOffsetY = e.clientY - panel.offsetTop;
+            panel.style.cursor = 'grabbing';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (isDraggingPanel) {
+                const panel = document.getElementById('controls-panel');
+                const newLeft = e.clientX - panelOffsetX;
+                const newTop = e.clientY - panelOffsetY;
+
+                // Keep panel within viewport bounds
+                const maxLeft = window.innerWidth - panel.offsetWidth;
+                const maxTop = window.innerHeight - panel.offsetHeight;
+
+                panel.style.left = Math.max(0, Math.min(newLeft, maxLeft)) + 'px';
+                panel.style.top = Math.max(0, Math.min(newTop, maxTop)) + 'px';
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            isDraggingPanel = false;
+            document.getElementById('controls-panel').style.cursor = 'default';
+        });
+
+        // County toggle
+        document.getElementById('toggle-all-counties').addEventListener('click', () => {
+            const allChecked = Object.values(countyCheckboxes).every(checked => checked);
+            const newState = !allChecked;
+
+            Object.keys(countyCheckboxes).forEach(county => {
+                countyCheckboxes[county] = newState;
+                const checkbox = document.getElementById(`county-${county}`);
+                if (checkbox) checkbox.checked = newState;
+            });
+
+            document.getElementById('toggle-all-counties').textContent = newState ? 'Hide All Counties' : 'Show All Counties';
+            updateCountyLayer();
+        });
+
+        // County selection
+        document.getElementById('county-select').addEventListener('change', (e) => {
+            const selectedCounty = e.target.value;
+
+            if (selectedCounty === '') {
+                // Whole Area selected: Zoom out to show all counties
+                if (countyLayer) map.fitBounds(countyLayer.getBounds());
+                return;
+            }
+
+            // Find the feature and its bounds
+            const feature = allCountyGeoJSON.features.find(f =>
+                f.properties.COUNTY_NAM === selectedCounty
+            );
+
+            if (feature && feature.properties.bbox) {
+                // BBox is a 4-element array: [minLon, minLat, maxLon, maxLat]
+                const [minLon, minLat, maxLon, maxLat] = feature.properties.bbox;
+
+                // Leaflet LatLngBounds expects [[south, west], [north, east]]
+                // [minLat, minLon] is SW corner, [maxLat, maxLon] is NE corner
+                const bounds = L.latLngBounds([[minLat, minLon], [maxLat, maxLon]]);
+                map.fitBounds(bounds, { padding: [20, 20] }); // Zoom with padding
+            }
+        });
+
+        // Download GeoJSON
+        document.getElementById('download-geojson-btn').addEventListener('click', async () => {
+            const countyName = document.getElementById('county-select').value || 'Whole Area';
+
+            document.getElementById('download-geojson-btn').disabled = true;
+            document.getElementById('download-geojson-btn').textContent = 'Generating URL...';
+            displayError('');
+
+            try {
+                // Call the new download endpoint
+                const response = await fetch(`/api/download/geojson?countyName=${encodeURIComponent(countyName)}`);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Could not generate download link.');
+                }
+
+                // Trigger the download by creating a temporary link
+                const tempLink = document.createElement('a');
+                tempLink.href = data.downloadUrl;
+                tempLink.setAttribute('download', ''); // Forces download
+                document.body.appendChild(tempLink);
+                tempLink.click();
+                document.body.removeChild(tempLink);
+
+                displayError('Download successfully started! (The link is temporary)');
+
+            } catch (error) {
+                console.error('Download Failed:', error);
+                displayError(`Download Failed: ${error.message}`);
+            } finally {
+                document.getElementById('download-geojson-btn').disabled = false;
+                document.getElementById('download-geojson-btn').textContent = countyName === 'Whole Area' ?
+                    '⬇️ Download All Counties GeoJSON' :
+                    `⬇️ Download ${countyName} GeoJSON`;
+            }
+        });
+
+        // Analysis form submission
+        document.getElementById('analysis-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            displayError('');
+            clearMapLayer();
+            document.getElementById('loader').style.display = 'block';
+            const btn = document.getElementById('submit-btn');
+            btn.disabled = true;
+
+            const countyName = document.getElementById('county-select').value;
+            const year = document.getElementById('year-input').value;
+            const enhancement = document.getElementById('enhancement-select').value;
+            const cloudCover = document.getElementById('cloud-cover-input').value;
+
+            const requestBody = {
+                year: parseInt(year),
+                bands: ["B4", "B3", "B2"],
+                enhancement: enhancement,
+                countyName: countyName || null,
+                cloudCover: parseFloat(cloudCover)
+            };
+
+            try {
+                const response = await fetch('/api/sentinel', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Unknown server error.');
+                }
+
+                // SUCCESS: Add the Earth Engine Tile Layer to the map
+                const mapId = data.mapId;
+                const tileUrl = mapId.urlFormat;
+
+                eeTileLayer = L.tileLayer(tileUrl, {
+                    tileSize: 256,
+                    attribution: 'Sentinel-2 via Google Earth Engine'
+                }).addTo(map);
+
+                // Re-order layers to ensure the county layer is on top
+                if (countyLayer) countyLayer.bringToFront();
+
+                // Update toggle button text
+                const allChecked = Object.values(countyCheckboxes).every(checked => checked);
+                document.getElementById('toggle-all-counties').textContent = allChecked ? 'Hide All Counties' : 'Show All Counties';
+
+                // Update the legend
+                if (data.legendInfo && data.legendInfo.title) {
+                    showLegendPopup(data.legendInfo);
+                }
+
+            } catch (error) {
+                console.error('Map Generation Failed:', error);
+                displayError(`Analysis Failed: ${error.message}`);
+            } finally {
+                document.getElementById('loader').style.display = 'none';
+                btn.disabled = false;
+            }
+        });
+
+        // Update time every second
+        function updateTime() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-US', {
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            document.getElementById('currentTime').textContent = timeString;
+        }
+
+        // Initialize time updates
+        updateTime();
+        setInterval(updateTime, 1000);
+
+        // Initialize
+        populateYears();
+        fetchAndDrawCounties();
+    </script>
+</body>
+</html>
