@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geospatial Analysis Portal - Earth Engine</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        /* Basic styling for a clean layout */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f4f7f9; display: flex; }
+        #map { height: 100vh; flex-grow: 1; border-left: 1px solid #ddd; }
+        #controls { width: 350px; padding: 20px; background-color: white; box-shadow: 2px 0 5px rgba(0,0,0,0.1); overflow-y: auto; }
+        h1 { color: #333; font-size: 1.5em; border-bottom: 2px solid #007bff; padding-bottom: 10px; margin-top: 0; }
+        label { display: block; margin-top: 15px; font-weight: 600; color: #555; }
+        select, input[type="number"] { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { background-color: #007bff; color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; margin-top: 20px; width: 100%; font-size: 1.1em; transition: background-color 0.3s ease; }
+        button:hover { background-color: #0056b3; }
+        .secondary-button { background-color: #28a745; margin-top: 10px; }
+        .secondary-button:hover { background-color: #1e7e34; }
+        #legend { margin-top: 25px; padding: 15px; border: 1px solid #ddd; border-radius: 5px; background-color: #f9f9f9; display: none; }
+        .legend-item { display: flex; align-items: center; margin-bottom: 5px; }
+        .color-box { width: 20px; height: 10px; margin-right: 10px; border: 1px solid #aaa; }
+        .legend-desc { font-style: italic; color: #777; margin-top: 5px; font-size: 0.9em; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #007bff; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; margin: 15px auto; display: none; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .error-message { color: red; margin-top: 10px; font-weight: bold; }
+        /* Style for the GeoJSON layer to show boundaries clearly */
+        .county-boundary {
+            opacity: 0.8;
+            stroke-width: 1px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="controls">
+        <h1>🛰️ Geospatial Analysis Portal</h1>
+
+        <button id="download-geojson-btn" class="secondary-button" disabled>
+            ⬇️ Download GeoJSON
+        </button>
+
+        <form id="analysis-form">
+            <label for="county-select">County/AOI:</label>
+            <select id="county-select" required>
+                <option value="" disabled selected>Loading counties...</option>
+            </select>
+
+            <label for="year-input">Year:</label>
+            <select id="year-input" required>
+                </select>
+
+            <label for="cloud-cover-input">Max Cloud Cover (%)</label>
+            <input type="number" id="cloud-cover-input" min="1" max="100" value="10" required>
+
+            <label for="enhancement-select">Analysis/Enhancement:</label>
+            <select id="enhancement-select" required>
+                <option value="true_color">True Color (B4, B3, B2)</option>
+                <option value="false_color">False Color (B8, B4, B3) - Vegetation</option>
+                <option value="ndvi">NDVI (Normalized Difference Vegetation Index)</option>
+                <option value="moisture_index">NDMI (Normalized Difference Moisture Index)</option>
+                <option value="agriculture">Agriculture (B11, B8, B2)</option>
+                <option value="urban">Urban (B12, B11, B4)</option>
+            </select>
+
+            <button type="submit" id="submit-btn">Generate Sentinel Map</button>
+
+            <div class="loader" id="loader"></div>
+            <div id="error-display" class="error-message"></div>
+        </form>
+
+        <div id="legend">
+            <h3 id="legend-title">Legend</h3>
+            <div id="legend-classes">
+                </div>
+            <p id="legend-description" class="legend-desc"></p>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+    <script>
+        // ===================================================================
+        // 🗺️ MAP INITIALIZATION & GLOBAL STATE
+        // ===================================================================
+        const map = L.map('map', {
+            center: [-0.05, 37.65], // Default center (e.g., central Kenya)
+            zoom: 7,
+            minZoom: 2,
+            maxZoom: 18
+        });
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        let eeTileLayer = null; // Holds the Sentinel layer
+        let countyLayer = null; // Holds the GeoJSON county layer
+        let allCountyGeoJSON = null; // Stores the GeoJSON data once loaded
+
+        const loader = document.getElementById('loader');
+        const errorDisplay = document.getElementById('error-display');
+        const legendDiv = document.getElementById('legend');
+        const form = document.getElementById('analysis-form');
+        const countySelect = document.getElementById('county-select');
+        const downloadBtn = document.getElementById('download-geojson-btn');
+
+        // ===================================================================
+        // 🔄 UTILITY FUNCTIONS
+        // ===================================================================
+
+        const displayError = (message) => {
+            errorDisplay.textContent = message;
+            legendDiv.style.display = 'none';
+        }
+
+        const clearMapLayer = () => {
+            if (eeTileLayer) {
+                map.removeLayer(eeTileLayer);
+                eeTileLayer = null;
+            }
+        }
+        
+        /** Styles the county features for display */
+        const styleCounty = (feature) => {
+            return {
+                fillColor: feature.properties.color || '#cccccc',
+                weight: 2,
+                opacity: 0.8,
+                color: 'black',
+                dashArray: '3',
+                fillOpacity: 0.5
+            };
+        }
+
+        /** Handles interaction with the GeoJSON layer (popup) */
+        const onEachFeature = (feature, layer) => {
+            if (feature.properties && feature.properties.COUNTY_NAM) {
+                layer.bindPopup(`<b>County:</b> ${feature.properties.COUNTY_NAM}`);
+            }
+        }
+
+
+        // ===================================================================
+        // 🗺️ INITIAL DATA & MAP POPULATION
+        // ===================================================================
+
+        /** Populates the Year dropdown with the last 10 years. */
+        const populateYears = () => {
+            const currentYear = new Date().getFullYear();
+            const yearSelect = document.getElementById('year-input');
+            for (let i = 0; i < 10; i++) {
+                const year = currentYear - i;
+                const option = document.createElement('option');
+                option.value = year;
+                option.textContent = year;
+                if (i === 0) option.selected = true;
+                yearSelect.appendChild(option);
+            }
+        };
+
+        /** Fetches GeoJSON, populates the dropdown, and draws the counties. */
+        const fetchAndDrawCounties = async () => {
+            try {
+                loader.style.display = 'block';
+                countySelect.innerHTML = '<option value="" disabled selected>Loading boundaries...</option>';
+                downloadBtn.disabled = true;
+
+                const response = await fetch('/api/counties/geojson');
+                const data = await response.json();
+                
+                allCountyGeoJSON = data.geojson; // Store GeoJSON data
+                
+                // 1. Draw Counties on Map
+                if (countyLayer) map.removeLayer(countyLayer);
+                countyLayer = L.geoJson(allCountyGeoJSON, {
+                    style: styleCounty,
+                    onEachFeature: onEachFeature
+                }).addTo(map);
+
+                // Zoom to the extent of all counties
+                map.fitBounds(countyLayer.getBounds());
+
+                // 2. Populate Dropdown
+                countySelect.innerHTML = '<option value="" selected>Whole Area (Center Point)</option>';
+                data.countyList.forEach(county => {
+                    const option = document.createElement('option');
+                    option.value = county;
+                    option.textContent = county;
+                    countySelect.appendChild(option);
+                });
+                
+                downloadBtn.disabled = false;
+                downloadBtn.textContent = '⬇️ Download All Counties GeoJSON';
+                console.log('Counties GeoJSON loaded and drawn successfully.');
+
+            } catch (error) {
+                console.error('Error fetching GeoJSON:', error);
+                countySelect.innerHTML = '<option value="" disabled selected>Failed to load counties</option>';
+                displayError('Could not load county boundaries. Server might be offline.');
+            } finally {
+                loader.style.display = 'none';
+            }
+        };
+
+        // Run initial setup
+        populateYears();
+        fetchAndDrawCounties();
+
+        // ===================================================================
+        // 👂 EVENT HANDLERS
+        // ===================================================================
+
+        /** Zooms to the selected county and updates the download button text. */
+        countySelect.addEventListener('change', (e) => {
+            const selectedCounty = e.target.value;
+
+            if (selectedCounty === '') {
+                // Whole Area selected: Zoom out to show all counties
+                if (countyLayer) map.fitBounds(countyLayer.getBounds());
+                downloadBtn.textContent = '⬇️ Download All Counties GeoJSON';
+                return;
+            }
+
+            // Find the feature and its bounds
+            const feature = allCountyGeoJSON.features.find(f => 
+                f.properties.COUNTY_NAM === selectedCounty
+            );
+
+            if (feature && feature.properties.bbox) {
+                // BBox is a 4-element array: [minLon, minLat, maxLon, maxLat]
+                const [minLon, minLat, maxLon, maxLat] = feature.properties.bbox;
+                
+                // Leaflet LatLngBounds expects [[south, west], [north, east]]
+                // [minLat, minLon] is SW corner, [maxLat, maxLon] is NE corner
+                const bounds = L.latLngBounds([[minLat, minLon], [maxLat, maxLon]]);
+                map.fitBounds(bounds, { padding: [20, 20] }); // Zoom with padding
+                
+                downloadBtn.textContent = `⬇️ Download ${selectedCounty} GeoJSON`;
+            }
+        });
+
+        /** Generates and triggers the GeoJSON download. */
+        downloadBtn.addEventListener('click', async () => {
+            const countyName = countySelect.value || 'Whole Area';
+            
+            downloadBtn.disabled = true;
+            downloadBtn.textContent = 'Generating URL...';
+            displayError('');
+
+            try {
+                // Call the new download endpoint
+                const response = await fetch(`/api/download/geojson?countyName=${encodeURIComponent(countyName)}`);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Could not generate download link.');
+                }
+                
+                // Trigger the download by creating a temporary link
+                const tempLink = document.createElement('a');
+                tempLink.href = data.downloadUrl;
+                tempLink.setAttribute('download', ''); // Forces download
+                document.body.appendChild(tempLink);
+                tempLink.click();
+                document.body.removeChild(tempLink);
+                
+                displayError('Download successfully started! (The link is temporary)');
+
+            } catch (error) {
+                console.error('Download Failed:', error);
+                displayError(`Download Failed: ${error.message}`);
+            } finally {
+                downloadBtn.disabled = false;
+                downloadBtn.textContent = countyName === 'Whole Area' ? 
+                                          '⬇️ Download All Counties GeoJSON' : 
+                                          `⬇️ Download ${countyName} GeoJSON`;
+            }
+        });
+
+
+        /** Handles the Sentinel-2 image generation. */
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            displayError('');
+            clearMapLayer();
+            loader.style.display = 'block';
+            const btn = document.getElementById('submit-btn');
+            btn.disabled = true;
+
+            const countyName = countySelect.value;
+            const year = document.getElementById('year-input').value;
+            const enhancement = document.getElementById('enhancement-select').value;
+            const cloudCover = document.getElementById('cloud-cover-input').value;
+            
+            const requestBody = {
+                year: parseInt(year),
+                bands: ["B4", "B3", "B2"],
+                enhancement: enhancement,
+                countyName: countyName || null,
+                cloudCover: parseFloat(cloudCover)
+            };
+
+            try {
+                const response = await fetch('/api/sentinel', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Unknown server error.');
+                }
+
+                // SUCCESS: Add the Earth Engine Tile Layer to the map
+                const mapId = data.mapId;
+                const tileUrl = mapId.urlFormat;
+                
+                eeTileLayer = L.tileLayer(tileUrl, {
+                    tileSize: 256,
+                    attribution: 'Sentinel-2 via Google Earth Engine'
+                }).addTo(map);
+
+                // Re-order layers to ensure the county layer is on top
+                if (countyLayer) countyLayer.bringToFront(); 
+
+                // Update the legend 
+                // NOTE: Legend update logic (omitted here for space, but assumed to exist)
+
+            } catch (error) {
+                console.error('Map Generation Failed:', error);
+                displayError(`Analysis Failed: ${error.message}`);
+            } finally {
+                loader.style.display = 'none';
+                btn.disabled = false;
+            }
+        });
+    </script>
+
+</body>
+</html>
